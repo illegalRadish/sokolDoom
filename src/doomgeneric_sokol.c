@@ -28,11 +28,9 @@ typedef enum {
 static struct {
     app_state_t state;
     uint64_t start_time;
-    uint32_t ticks_ms;
     sg_buffer vbuf;
     sg_image img;
     sg_pipeline pip;
-    sg_bindings bind;
 } app;
 
 #define MAX_WAD_SIZE (6 * 1024 * 1024)
@@ -104,10 +102,6 @@ void DG_Init(void) {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
         },
     });
-    app.bind = (sg_bindings){
-        .vertex_buffers[0] = app.vbuf,
-        .fs_images[0] = app.img
-    };
 }
 
 void DG_SetWindowTitle(const char* title) {
@@ -131,12 +125,15 @@ void DG_DrawFrame(void) {
     sg_update_image(app.img, &(sg_image_data){
         .subimage[0][0] = {
             .ptr = DG_ScreenBuffer,
-            .size = DOOMGENERIC_RESX*DOOMGENERIC_RESY*sizeof(uint32_t)
+            .size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t)
         }
     });
     sg_begin_default_pass(&(sg_pass_action){0}, sapp_width(), sapp_height());
     sg_apply_pipeline(app.pip);
-    sg_apply_bindings(&app.bind);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = app.vbuf,
+        .fs_images[0] = app.img,
+    });
     sg_draw(0, 3, 1);
     sg_end_pass();
     sg_commit();
@@ -186,7 +183,6 @@ void frame(void) {
     switch (app.state) {
         case APP_STATE_LOADING:
             draw_loading_screen();
-            //app.state = APP_STATE_INIT;
             break;
 
         case APP_STATE_INIT:
@@ -196,7 +192,7 @@ void frame(void) {
             D_DoomMain();
             app.start_time = stm_now();
             app.state = APP_STATE_RUNNING;
-            // fallthough
+            // fallthough!
         case APP_STATE_RUNNING:
             D_DoomFrame();
             break;
@@ -213,6 +209,7 @@ void cleanup(void) {
 }
 
 void input(const sapp_event* ev) {
+    // FIXME
     (void)ev;
 }
 
