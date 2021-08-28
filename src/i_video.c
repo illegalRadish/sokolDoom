@@ -190,9 +190,10 @@ void I_InitGraphics (void)
 	s_Fb.red.length = 8;
 	s_Fb.transp.length = 8;
 
-	s_Fb.blue.offset = 0;
+    // SOKOL CHANGE
+	s_Fb.blue.offset = 16;
 	s_Fb.green.offset = 8;
-	s_Fb.red.offset = 16;
+	s_Fb.red.offset = 0;
 	s_Fb.transp.offset = 24;
 	
 
@@ -223,7 +224,7 @@ void I_InitGraphics (void)
 
 	screenvisible = true;
 
-    extern int I_InitInput(void);
+    extern void I_InitInput(void);
     I_InitInput();
 }
 

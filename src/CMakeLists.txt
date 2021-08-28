@@ -102,7 +102,6 @@ fips_begin_app(doom windowed)
         w_main.c
         w_wad.c
         z_zone.c
-        w_file_stdc.c
         i_input.c
         i_video.c
         doomgeneric.c

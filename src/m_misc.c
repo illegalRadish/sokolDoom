@@ -24,6 +24,9 @@
 #include <ctype.h>
 #include <errno.h>
 
+// SOKOL CHANGE
+#include <assert.h>
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -54,17 +57,28 @@
 
 void M_MakeDirectory(char *path)
 {
+    // SOKOL CHANGE
+/*
 #ifdef _WIN32
     mkdir(path);
 #else
     mkdir(path, 0755);
 #endif
+*/
 }
 
 // Check if a file exists
-
 boolean M_FileExists(char *filename)
 {
+    // SOKOL CHANGE
+    if (0 == strcmp(filename, "DOOM1.WAD")) {
+        return true;
+    }
+    else {
+        assert(false);
+        return false;
+    }
+    /*
     FILE *fstream;
 
     fstream = fopen(filename, "r");
@@ -81,6 +95,7 @@ boolean M_FileExists(char *filename)
 
         return errno == EISDIR;
     }
+    */
 }
 
 //
@@ -88,7 +103,12 @@ boolean M_FileExists(char *filename)
 //
 
 long M_FileLength(FILE *handle)
-{ 
+{
+    // SOKOL CHANGE
+    assert(false);
+    return 0;
+
+    /*
     long savedpos;
     long length;
 
@@ -103,6 +123,7 @@ long M_FileLength(FILE *handle)
     fseek(handle, savedpos, SEEK_SET);
 
     return length;
+    */
 }
 
 //
@@ -111,6 +132,11 @@ long M_FileLength(FILE *handle)
 
 boolean M_WriteFile(char *name, void *source, int length)
 {
+    // SOKOL CHANGE
+    assert(false);
+    return false;
+
+    /*
     FILE *handle;
     int	count;
 	
@@ -126,6 +152,7 @@ boolean M_WriteFile(char *name, void *source, int length)
 	return false;
 		
     return true;
+    */
 }
 
 
@@ -135,6 +162,11 @@ boolean M_WriteFile(char *name, void *source, int length)
 
 int M_ReadFile(char *name, byte **buffer)
 {
+    // SOKOL CHANGE
+    assert(false);
+    return 0;
+
+    /*
     FILE *handle;
     int	count, length;
     byte *buf;
@@ -157,6 +189,7 @@ int M_ReadFile(char *name, byte **buffer)
 		
     *buffer = buf;
     return length;
+    */
 }
 
 // Returns the path to a temporary file of the given name, stored
@@ -166,6 +199,11 @@ int M_ReadFile(char *name, byte **buffer)
 
 char *M_TempFile(char *s)
 {
+    // SOKOL CHANGE
+    assert(false);
+    return 0;
+
+    /*
     char *tempdir;
 
 #ifdef _WIN32
@@ -185,6 +223,7 @@ char *M_TempFile(char *s)
 #endif
 
     return M_StringJoin(tempdir, DIR_SEPARATOR_S, s, NULL);
+    */
 }
 
 boolean M_StrToInt(const char *str, int *result)
