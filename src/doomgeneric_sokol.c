@@ -37,8 +37,6 @@ typedef struct {
 
 static struct {
     app_state_t state;
-    uint64_t start_time;
-    uint64_t cur_ticks_ms;
     sg_buffer vbuf;
     sg_image img;
     sg_pipeline pip;
@@ -171,6 +169,28 @@ static void draw_loading_failed_screen(void) {
     sg_commit();
 }
 
+// helper function to adjust aspect ratio
+static void apply_viewport(float canvas_width, float canvas_height) {
+    const float canvas_aspect = canvas_width / canvas_height;
+    const float doom_width = (float)DOOMGENERIC_RESX;
+    const float doom_height = (float)DOOMGENERIC_RESY;
+    const float doom_aspect = doom_width / doom_height;
+    float vp_x, vp_y, vp_w, vp_h;
+    if (doom_aspect < canvas_aspect) {
+        vp_y = 0.0f;
+        vp_h = canvas_height;
+        vp_w = canvas_height * doom_aspect;
+        vp_x = (canvas_width - vp_w) / 2;
+    }
+    else {
+        vp_x = 0.0f;
+        vp_w = canvas_width;
+        vp_h = canvas_width / doom_aspect;
+        vp_y = (canvas_height - vp_h) / 2;
+    }
+    sg_apply_viewport(vp_x, vp_y, vp_w, vp_h, true);
+}
+
 // copy the Doom framebuffer into sokol-gfx texture and render to display
 static void draw_game_frame(void) {
     sg_update_image(app.img, &(sg_image_data){
@@ -186,14 +206,13 @@ static void draw_game_frame(void) {
         .vertex_buffers[0] = app.vbuf,
         .fs_images[0] = app.img,
     });
+    apply_viewport(sapp_widthf(), sapp_heightf());
     sg_draw(0, 3, 1);
     sg_end_pass();
     sg_commit();
 }
 
 void frame(void) {
-//    app.cur_ticks_ms = stm_ms(stm_since(app.start_time));
-//app.cur_ticks_ms += 1;
     sfetch_dowork();
     switch (app.state) {
         case APP_STATE_LOADING:
@@ -204,10 +223,10 @@ void frame(void) {
             dg_Create();
             // D_DoomMain() without the trailing call to D_DoomLoop()
             D_DoomMain();
-            app.start_time = stm_now();
             app.state = APP_STATE_RUNNING;
             // fallthough!
         case APP_STATE_RUNNING:
+            // FIXME: run D_DoomFrame at actual 30 fps, regardless of display refresh rate
             if (sapp_frame_count() & 1) {
                 D_DoomFrame();
             }
@@ -393,10 +412,10 @@ void DG_SleepMs(uint32_t ms) {
     assert(false && "DG_SleepMS called!\n");
 }
 
-// this function is used all over the place unfortunately
+// NO IDEA why tf this works, but it's a non-intrusive way to fix the timing
+// (I guess Doom advances at least one game tick per frame)
 uint32_t DG_GetTicksMs(void) {
     return 0;
-    //return app.cur_ticks_ms;
 }
 
 //== FILE SYSTEM OVERRIDE ======================================================
