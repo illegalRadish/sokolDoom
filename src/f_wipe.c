@@ -264,17 +264,17 @@ wipe_ScreenWipe
     int rc;
     static int (*wipes[])(int, int, int) =
     {
-	wipe_initColorXForm, wipe_doColorXForm, wipe_exitColorXForm,
-	wipe_initMelt, wipe_doMelt, wipe_exitMelt
+        wipe_initColorXForm, wipe_doColorXForm, wipe_exitColorXForm,
+        wipe_initMelt, wipe_doMelt, wipe_exitMelt
     };
 
     // initial stuff
     if (!go)
     {
-	go = 1;
-	// wipe_scr = (byte *) Z_Malloc(width*height, PU_STATIC, 0); // DEBUG
-	wipe_scr = I_VideoBuffer;
-	(*wipes[wipeno*3])(width, height, ticks);
+        go = 1;
+        // wipe_scr = (byte *) Z_Malloc(width*height, PU_STATIC, 0); // DEBUG
+        wipe_scr = I_VideoBuffer;
+        (*wipes[wipeno*3])(width, height, ticks);
     }
 
     // do a piece of wipe-in
@@ -285,8 +285,8 @@ wipe_ScreenWipe
     // final stuff
     if (rc)
     {
-	go = 0;
-	(*wipes[wipeno*3+2])(width, height, ticks);
+        go = 0;
+        (*wipes[wipeno*3+2])(width, height, ticks);
     }
 
     return !go;
