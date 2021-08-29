@@ -1,5 +1,8 @@
 //------------------------------------------------------------------------------
 //  doomgeneric_sokol.c
+//
+//  This is all the sokol-backend-specific code, including the entry
+//  point sokol_main().
 //------------------------------------------------------------------------------
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -15,7 +18,6 @@
 void D_DoomMain(void);
 void D_DoomLoop(void);
 void D_DoomFrame(void);
-void M_FindResponseFile(void);
 void dg_Create();
 
 typedef enum {
@@ -28,6 +30,7 @@ typedef enum {
 static struct {
     app_state_t state;
     uint64_t start_time;
+    uint64_t cur_ticks_ms;
     sg_buffer vbuf;
     sg_image img;
     sg_pipeline pip;
@@ -48,7 +51,7 @@ void fetch_callback(const sfetch_response_t* response) {
 }
 
 void init(void) {
-    app.state = APP_STATE_LOADING;
+    // initialize sokol-time, -gfx, -debugtext and -fetch
     stm_setup();
     sg_setup(&(sg_desc){
         .buffer_pool_size = 8,
@@ -67,16 +70,10 @@ void init(void) {
         .num_channels = 1,
         .num_lanes = 1,
     });
-    sfetch_send(&(sfetch_request_t){
-        .path = "DOOM1.WAD",
-        .callback = fetch_callback,
-        .buffer_ptr = wad_buffer,
-        .buffer_size = sizeof(wad_buffer)
-    });
-}
 
-void DG_Init(void) {
-    // fullscreen triangle vertices
+    // create sokol-gfx resources to render a fullscreen texture
+
+    // a vertex buffer to render a fullscreen triangle
     const float verts[] = {
         0.0f, 0.0f,
         2.0f, 0.0f,
@@ -86,6 +83,7 @@ void DG_Init(void) {
         .data = SG_RANGE(verts),
     });
 
+    // a dynamic texture for Doom's framebuffer
     app.img = sg_make_image(&(sg_image_desc){
         .width = DOOMGENERIC_RESX,
         .height = DOOMGENERIC_RESY,
@@ -96,49 +94,32 @@ void DG_Init(void) {
         .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
         .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
     });
+
+    // a pipeline object to render a textured fullscreen triangle
     app.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(display_shader_desc(sg_query_backend())),
         .layout = {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
         },
-    });
-}
-
-void DG_SetWindowTitle(const char* title) {
-//    sapp_set_window_title(title);
-}
-
-int DG_GetKey(int* pressed, unsigned char* doomKey) {
-    // FIXME
-    return 0;
-}
-
-void DG_SleepMs(uint32_t ms) {
-    assert(false && "DG_SleepMS called!\n");
-}
-
-uint32_t DG_GetTicksMs(void) {
-    return (uint32_t) stm_ms(stm_since(app.start_time));
-}
-
-void DG_DrawFrame(void) {
-    sg_update_image(app.img, &(sg_image_data){
-        .subimage[0][0] = {
-            .ptr = DG_ScreenBuffer,
-            .size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t)
+        .cull_mode = SG_CULLMODE_NONE,
+        .depth = {
+            .write_enabled = false,
+            .compare = SG_COMPAREFUNC_ALWAYS
         }
     });
-    sg_begin_default_pass(&(sg_pass_action){0}, sapp_width(), sapp_height());
-    sg_apply_pipeline(app.pip);
-    sg_apply_bindings(&(sg_bindings){
-        .vertex_buffers[0] = app.vbuf,
-        .fs_images[0] = app.img,
+
+    // start loading the DOOM1.WAD file, the game start will be delayed
+    // until this has finished (see the frame() callback below)
+    sfetch_send(&(sfetch_request_t){
+        .path = "DOOM1.WAD",
+        .callback = fetch_callback,
+        .buffer_ptr = wad_buffer,
+        .buffer_size = sizeof(wad_buffer)
     });
-    sg_draw(0, 3, 1);
-    sg_end_pass();
-    sg_commit();
+    app.state = APP_STATE_LOADING;
 }
 
+// draw a simple loading message during async WAD file loading
 static void draw_loading_screen(void) {
     const float w = sapp_widthf();
     const float h = sapp_heightf();
@@ -159,6 +140,7 @@ static void draw_loading_screen(void) {
     sg_commit();
 }
 
+// draw an error screen if WAD file loading failed
 static void draw_loading_failed_screen(void) {
     const float w = sapp_widthf();
     const float h = sapp_heightf();
@@ -178,7 +160,29 @@ static void draw_loading_failed_screen(void) {
     sg_commit();
 }
 
+// copy the Doom framebuffer into sokol-gfx texture and render to display
+static void draw_game_frame(void) {
+    sg_update_image(app.img, &(sg_image_data){
+        .subimage[0][0] = {
+            .ptr = DG_ScreenBuffer,
+            .size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t)
+        }
+    });
+    const sg_pass_action pass_action = { .colors[0] = { .action = SG_ACTION_DONTCARE } };
+    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sg_apply_pipeline(app.pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = app.vbuf,
+        .fs_images[0] = app.img,
+    });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+}
+
 void frame(void) {
+//    app.cur_ticks_ms = stm_ms(stm_since(app.start_time));
+app.cur_ticks_ms += 16;
     sfetch_dowork();
     switch (app.state) {
         case APP_STATE_LOADING:
@@ -186,7 +190,6 @@ void frame(void) {
             break;
 
         case APP_STATE_INIT:
-            M_FindResponseFile();
             dg_Create();
             // D_DoomMain() without the trailing call to D_DoomLoop()
             D_DoomMain();
@@ -195,6 +198,7 @@ void frame(void) {
             // fallthough!
         case APP_STATE_RUNNING:
             D_DoomFrame();
+            draw_game_frame();
             break;
 
         case APP_STATE_LOADING_FAILED:
@@ -230,6 +234,41 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .window_title = "Sokol Doom Shareware",
         .icon.sokol_default = true,
     };
+}
+
+//== DoomGeneric backend callbacks =============================================
+
+// Note that some of those are empty, because they only make sense
+// in an "own the game loop" scenario, not in a frame-callback scenario.
+
+void DG_Init(void) {
+    // empty, see sokol-app init() callback instead
+}
+
+void DG_DrawFrame(void) {
+    // empty, see sokol-app frame() callback instead
+}
+
+void DG_SetWindowTitle(const char* title) {
+    // window title changes ignored
+    (void)title;
+}
+
+int DG_GetKey(int* pressed, unsigned char* doomKey) {
+    // FIXME
+    return 0;
+}
+
+// the sleep function is used in blocking wait loops, those don't
+// work in a browser environment anyway, inject an assert instead
+// so we easily find all those wait loops
+void DG_SleepMs(uint32_t ms) {
+    assert(false && "DG_SleepMS called!\n");
+}
+
+// this function is used all over the place unfortunately
+uint32_t DG_GetTicksMs(void) {
+    return app.cur_ticks_ms;
 }
 
 //== FILE SYSTEM OVERRIDE ======================================================
