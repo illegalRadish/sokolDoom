@@ -1507,73 +1507,73 @@ boolean M_Responder (event_t* ev)
     }
     else
     {
-	if (ev->type == ev_mouse && mousewait < I_GetTime())
-	{
-	    mousey += ev->data3;
-	    if (mousey < lasty-30)
-	    {
-		key = key_menu_down;
-		mousewait = I_GetTime() + 5;
-		mousey = lasty -= 30;
-	    }
-	    else if (mousey > lasty+30)
-	    {
-		key = key_menu_up;
-		mousewait = I_GetTime() + 5;
-		mousey = lasty += 30;
-	    }
-		
-	    mousex += ev->data2;
-	    if (mousex < lastx-30)
-	    {
-		key = key_menu_left;
-		mousewait = I_GetTime() + 5;
-		mousex = lastx -= 30;
-	    }
-	    else if (mousex > lastx+30)
-	    {
-		key = key_menu_right;
-		mousewait = I_GetTime() + 5;
-		mousex = lastx += 30;
-	    }
-		
-	    if (ev->data1&1)
-	    {
-		key = key_menu_forward;
-		mousewait = I_GetTime() + 15;
-	    }
-			
-	    if (ev->data1&2)
-	    {
-		key = key_menu_back;
-		mousewait = I_GetTime() + 15;
-	    }
-	}
-	else
-	{
-	    if (ev->type == ev_keydown)
-	    {
-		key = ev->data1;
-		ch = ev->data2;
-	    }
-	}
+        if (ev->type == ev_mouse && mousewait < I_GetTime())
+        {
+            mousey += ev->data3;
+            if (mousey < lasty-30)
+            {
+                key = key_menu_down;
+                mousewait = I_GetTime() + 5;
+                mousey = lasty -= 30;
+            }
+            else if (mousey > lasty+30)
+            {
+                key = key_menu_up;
+                mousewait = I_GetTime() + 5;
+                mousey = lasty += 30;
+            }
+
+            mousex += ev->data2;
+            if (mousex < lastx-30)
+            {
+                key = key_menu_left;
+                mousewait = I_GetTime() + 5;
+                mousex = lastx -= 30;
+            }
+            else if (mousex > lastx+30)
+            {
+                key = key_menu_right;
+                mousewait = I_GetTime() + 5;
+                mousex = lastx += 30;
+            }
+
+            if (ev->data1&1)
+            {
+                key = key_menu_forward;
+                mousewait = I_GetTime() + 15;
+            }
+
+            if (ev->data1&2)
+            {
+                key = key_menu_back;
+                mousewait = I_GetTime() + 15;
+            }
+        }
+        else
+        {
+            if (ev->type == ev_keydown)
+            {
+                key = ev->data1;
+                ch = ev->data2;
+            }
+        }
     }
     
     if (key == -1)
-	return false;
+        return false;
 
     // Save Game string input
     if (saveStringEnter)
     {
-	switch(key)
-	{
-	  case KEY_BACKSPACE:
-	    if (saveCharIndex > 0)
-	    {
-		saveCharIndex--;
-		savegamestrings[saveSlot][saveCharIndex] = 0;
-	    }
-	    break;
+        switch(key)
+        {
+          case KEY_BACKSPACE:
+            if (saveCharIndex > 0)
+            {
+                saveCharIndex--;
+                savegamestrings[saveSlot][saveCharIndex] = 0;
+            }
+            break;
 
           case KEY_ESCAPE:
             saveStringEnter = 0;
@@ -1581,13 +1581,13 @@ boolean M_Responder (event_t* ev)
                          SAVESTRINGSIZE);
             break;
 
-	  case KEY_ENTER:
-	    saveStringEnter = 0;
-	    if (savegamestrings[saveSlot][0])
-		M_DoSave(saveSlot);
-	    break;
+          case KEY_ENTER:
+            saveStringEnter = 0;
+            if (savegamestrings[saveSlot][0])
+                M_DoSave(saveSlot);
+            break;
 
-	  default:
+          default:
             // This is complicated.
             // Vanilla has a bug where the shift key is ignored when entering
             // a savegame name. If vanilla_keyboard_mapping is on, we want
@@ -1599,7 +1599,6 @@ boolean M_Responder (event_t* ev)
             {
                 ch = key;
             }
-
             ch = toupper(ch);
 
             if (ch != ' '
@@ -1608,159 +1607,158 @@ boolean M_Responder (event_t* ev)
                 break;
             }
 
-	    if (ch >= 32 && ch <= 127 &&
-		saveCharIndex < SAVESTRINGSIZE-1 &&
-		M_StringWidth(savegamestrings[saveSlot]) <
-		(SAVESTRINGSIZE-2)*8)
-	    {
-		savegamestrings[saveSlot][saveCharIndex++] = ch;
-		savegamestrings[saveSlot][saveCharIndex] = 0;
-	    }
-	    break;
-	}
-	return true;
+            if (ch >= 32 && ch <= 127 &&
+                saveCharIndex < SAVESTRINGSIZE-1 &&
+                M_StringWidth(savegamestrings[saveSlot]) <
+                (SAVESTRINGSIZE-2)*8)
+            {
+                savegamestrings[saveSlot][saveCharIndex++] = ch;
+                savegamestrings[saveSlot][saveCharIndex] = 0;
+            }
+            break;
+        }
+        return true;
     }
     
     // Take care of any messages that need input
     if (messageToPrint)
     {
-	if (messageNeedsInput)
-        {
+        if (messageNeedsInput) {
             if (key != ' ' && key != KEY_ESCAPE
-             && key != key_menu_confirm && key != key_menu_abort)
+                && key != key_menu_confirm && key != key_menu_abort)
             {
                 return false;
             }
-	}
+        }
 
-	menuactive = messageLastMenuActive;
-	messageToPrint = 0;
-	if (messageRoutine)
-	    messageRoutine(key);
+        menuactive = messageLastMenuActive;
+        messageToPrint = 0;
+        if (messageRoutine)
+            messageRoutine(key);
 
-	menuactive = false;
-	S_StartSound(NULL,sfx_swtchx);
-	return true;
+        menuactive = false;
+        S_StartSound(NULL,sfx_swtchx);
+        return true;
     }
 
     if ((devparm && key == key_menu_help) ||
         (key != 0 && key == key_menu_screenshot))
     {
-	G_ScreenShot ();
-	return true;
+        G_ScreenShot ();
+        return true;
     }
 
     // F-Keys
     if (!menuactive)
     {
-	if (key == key_menu_decscreen)      // Screen size down
+        if (key == key_menu_decscreen)      // Screen size down
         {
-	    if (automapactive || chat_on)
-		return false;
-	    M_SizeDisplay(0);
-	    S_StartSound(NULL,sfx_stnmov);
-	    return true;
-	}
+            if (automapactive || chat_on)
+                return false;
+            M_SizeDisplay(0);
+            S_StartSound(NULL,sfx_stnmov);
+            return true;
+        }
         else if (key == key_menu_incscreen) // Screen size up
         {
-	    if (automapactive || chat_on)
-		return false;
-	    M_SizeDisplay(1);
-	    S_StartSound(NULL,sfx_stnmov);
-	    return true;
-	}
+            if (automapactive || chat_on)
+                return false;
+            M_SizeDisplay(1);
+            S_StartSound(NULL,sfx_stnmov);
+            return true;
+        }
         else if (key == key_menu_help)     // Help key
         {
-	    M_StartControlPanel ();
+            M_StartControlPanel ();
 
-	    if ( gamemode == retail )
-	      currentMenu = &ReadDef2;
-	    else
-	      currentMenu = &ReadDef1;
+            if ( gamemode == retail )
+                currentMenu = &ReadDef2;
+            else
+                currentMenu = &ReadDef1;
 
-	    itemOn = 0;
-	    S_StartSound(NULL,sfx_swtchn);
-	    return true;
-	}
+            itemOn = 0;
+            S_StartSound(NULL,sfx_swtchn);
+            return true;
+        }
         else if (key == key_menu_save)     // Save
         {
-	    M_StartControlPanel();
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_SaveGame(0);
-	    return true;
+            M_StartControlPanel();
+            S_StartSound(NULL,sfx_swtchn);
+            M_SaveGame(0);
+            return true;
         }
         else if (key == key_menu_load)     // Load
         {
-	    M_StartControlPanel();
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_LoadGame(0);
-	    return true;
+            M_StartControlPanel();
+            S_StartSound(NULL,sfx_swtchn);
+            M_LoadGame(0);
+            return true;
         }
         else if (key == key_menu_volume)   // Sound Volume
         {
-	    M_StartControlPanel ();
-	    currentMenu = &SoundDef;
-	    itemOn = sfx_vol;
-	    S_StartSound(NULL,sfx_swtchn);
-	    return true;
-	}
+            M_StartControlPanel ();
+            currentMenu = &SoundDef;
+            itemOn = sfx_vol;
+            S_StartSound(NULL,sfx_swtchn);
+            return true;
+        }
         else if (key == key_menu_detail)   // Detail toggle
         {
-	    M_ChangeDetail(0);
-	    S_StartSound(NULL,sfx_swtchn);
-	    return true;
+            M_ChangeDetail(0);
+            S_StartSound(NULL,sfx_swtchn);
+            return true;
         }
         else if (key == key_menu_qsave)    // Quicksave
         {
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_QuickSave();
-	    return true;
+            S_StartSound(NULL,sfx_swtchn);
+            M_QuickSave();
+            return true;
         }
         else if (key == key_menu_endgame)  // End game
         {
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_EndGame(0);
-	    return true;
+            S_StartSound(NULL,sfx_swtchn);
+            M_EndGame(0);
+            return true;
         }
         else if (key == key_menu_messages) // Toggle messages
         {
-	    M_ChangeMessages(0);
-	    S_StartSound(NULL,sfx_swtchn);
-	    return true;
+            M_ChangeMessages(0);
+            S_StartSound(NULL,sfx_swtchn);
+            return true;
         }
         else if (key == key_menu_qload)    // Quickload
         {
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_QuickLoad();
-	    return true;
+            S_StartSound(NULL,sfx_swtchn);
+            M_QuickLoad();
+            return true;
         }
         else if (key == key_menu_quit)     // Quit DOOM
         {
-	    S_StartSound(NULL,sfx_swtchn);
-	    M_QuitDOOM(0);
-	    return true;
+            S_StartSound(NULL,sfx_swtchn);
+            M_QuitDOOM(0);
+            return true;
         }
         else if (key == key_menu_gamma)    // gamma toggle
         {
-	    usegamma++;
-	    if (usegamma > 4)
-		usegamma = 0;
-	    players[consoleplayer].message = DEH_String(gammamsg[usegamma]);
+            usegamma++;
+            if (usegamma > 4)
+                usegamma = 0;
+            players[consoleplayer].message = DEH_String(gammamsg[usegamma]);
             I_SetPalette (W_CacheLumpName (DEH_String("PLAYPAL"),PU_CACHE));
-	    return true;
-	}
+            return true;
+        }
     }
 
     // Pop-up menu?
     if (!menuactive)
     {
-	if (key == key_menu_activate)
-	{
-	    M_StartControlPanel ();
-	    S_StartSound(NULL,sfx_swtchn);
-	    return true;
-	}
-	return false;
+        if (key == key_menu_activate)
+        {
+            M_StartControlPanel ();
+            S_StartSound(NULL,sfx_swtchn);
+            return true;
+        }
+        return false;
     }
 
     // Keys usable within menu
@@ -1768,97 +1766,90 @@ boolean M_Responder (event_t* ev)
     if (key == key_menu_down)
     {
         // Move down to next item
-
         do
-	{
-	    if (itemOn+1 > currentMenu->numitems-1)
-		itemOn = 0;
-	    else itemOn++;
-	    S_StartSound(NULL,sfx_pstop);
-	} while(currentMenu->menuitems[itemOn].status==-1);
-
-	return true;
+        {
+            if (itemOn+1 > currentMenu->numitems-1)
+                itemOn = 0;
+            else itemOn++;
+            S_StartSound(NULL,sfx_pstop);
+        } while(currentMenu->menuitems[itemOn].status==-1);
+        return true;
     }
     else if (key == key_menu_up)
     {
         // Move back up to previous item
+        do
+        {
+            if (!itemOn)
+                itemOn = currentMenu->numitems-1;
+            else itemOn--;
+            S_StartSound(NULL,sfx_pstop);
+        } while(currentMenu->menuitems[itemOn].status==-1);
 
-	do
-	{
-	    if (!itemOn)
-		itemOn = currentMenu->numitems-1;
-	    else itemOn--;
-	    S_StartSound(NULL,sfx_pstop);
-	} while(currentMenu->menuitems[itemOn].status==-1);
-
-	return true;
+        return true;
     }
     else if (key == key_menu_left)
     {
         // Slide slider left
 
-	if (currentMenu->menuitems[itemOn].routine &&
-	    currentMenu->menuitems[itemOn].status == 2)
-	{
-	    S_StartSound(NULL,sfx_stnmov);
-	    currentMenu->menuitems[itemOn].routine(0);
-	}
-	return true;
+        if (currentMenu->menuitems[itemOn].routine &&
+            currentMenu->menuitems[itemOn].status == 2)
+        {
+            S_StartSound(NULL,sfx_stnmov);
+            currentMenu->menuitems[itemOn].routine(0);
+        }
+        return true;
     }
     else if (key == key_menu_right)
     {
         // Slide slider right
-
-	if (currentMenu->menuitems[itemOn].routine &&
-	    currentMenu->menuitems[itemOn].status == 2)
-	{
-	    S_StartSound(NULL,sfx_stnmov);
-	    currentMenu->menuitems[itemOn].routine(1);
-	}
-	return true;
+        if (currentMenu->menuitems[itemOn].routine &&
+            currentMenu->menuitems[itemOn].status == 2)
+        {
+            S_StartSound(NULL,sfx_stnmov);
+            currentMenu->menuitems[itemOn].routine(1);
+        }
+        return true;
     }
     else if (key == key_menu_forward)
     {
         // Activate menu item
-
-	if (currentMenu->menuitems[itemOn].routine &&
-	    currentMenu->menuitems[itemOn].status)
-	{
-	    currentMenu->lastOn = itemOn;
-	    if (currentMenu->menuitems[itemOn].status == 2)
-	    {
-		currentMenu->menuitems[itemOn].routine(1);      // right arrow
-		S_StartSound(NULL,sfx_stnmov);
-	    }
-	    else
-	    {
-		currentMenu->menuitems[itemOn].routine(itemOn);
-		S_StartSound(NULL,sfx_pistol);
-	    }
-	}
-	return true;
+        if (currentMenu->menuitems[itemOn].routine &&
+            currentMenu->menuitems[itemOn].status)
+        {
+            currentMenu->lastOn = itemOn;
+            if (currentMenu->menuitems[itemOn].status == 2)
+            {
+                currentMenu->menuitems[itemOn].routine(1);      // right arrow
+                S_StartSound(NULL,sfx_stnmov);
+            }
+            else
+            {
+                currentMenu->menuitems[itemOn].routine(itemOn);
+                S_StartSound(NULL,sfx_pistol);
+            }
+        }
+        return true;
     }
     else if (key == key_menu_activate)
     {
         // Deactivate menu
-
-	currentMenu->lastOn = itemOn;
-	M_ClearMenus ();
-	S_StartSound(NULL,sfx_swtchx);
-	return true;
+        currentMenu->lastOn = itemOn;
+        M_ClearMenus ();
+        S_StartSound(NULL,sfx_swtchx);
+        return true;
     }
     else if (key == key_menu_back)
     {
         // Go back to previous menu
-
-	currentMenu->lastOn = itemOn;
-	if (currentMenu->prevMenu)
-	{
-	    currentMenu = currentMenu->prevMenu;
-	    itemOn = currentMenu->lastOn;
-	    S_StartSound(NULL,sfx_swtchn);
-	}
-	return true;
+        currentMenu->lastOn = itemOn;
+        if (currentMenu->prevMenu)
+        {
+            currentMenu = currentMenu->prevMenu;
+            itemOn = currentMenu->lastOn;
+            S_StartSound(NULL,sfx_swtchn);
+        }
+        return true;
     }
 
     // Keyboard shortcut?
@@ -1867,27 +1858,25 @@ boolean M_Responder (event_t* ev)
 
     else if (ch != 0 || IsNullKey(key))
     {
-	for (i = itemOn+1;i < currentMenu->numitems;i++)
+        for (i = itemOn+1;i < currentMenu->numitems;i++)
         {
-	    if (currentMenu->menuitems[i].alphaKey == ch)
-	    {
-		itemOn = i;
-		S_StartSound(NULL,sfx_pstop);
-		return true;
-	    }
+            if (currentMenu->menuitems[i].alphaKey == ch)
+            {
+                itemOn = i;
+                S_StartSound(NULL,sfx_pstop);
+                return true;
+            }
         }
-
-	for (i = 0;i <= itemOn;i++)
+        for (i = 0;i <= itemOn;i++)
         {
-	    if (currentMenu->menuitems[i].alphaKey == ch)
-	    {
-		itemOn = i;
-		S_StartSound(NULL,sfx_pstop);
-		return true;
-	    }
+            if (currentMenu->menuitems[i].alphaKey == ch)
+            {
+                itemOn = i;
+                S_StartSound(NULL,sfx_pstop);
+                return true;
+            }
         }
     }
-
     return false;
 }
 
