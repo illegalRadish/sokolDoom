@@ -182,7 +182,7 @@ static void draw_game_frame(void) {
 
 void frame(void) {
 //    app.cur_ticks_ms = stm_ms(stm_since(app.start_time));
-app.cur_ticks_ms += 16;
+//app.cur_ticks_ms += 1;
     sfetch_dowork();
     switch (app.state) {
         case APP_STATE_LOADING:
@@ -197,7 +197,9 @@ app.cur_ticks_ms += 16;
             app.state = APP_STATE_RUNNING;
             // fallthough!
         case APP_STATE_RUNNING:
-            D_DoomFrame();
+            if (sapp_frame_count() & 1) {
+                D_DoomFrame();
+            }
             draw_game_frame();
             break;
 
@@ -268,7 +270,8 @@ void DG_SleepMs(uint32_t ms) {
 
 // this function is used all over the place unfortunately
 uint32_t DG_GetTicksMs(void) {
-    return app.cur_ticks_ms;
+    return 0;
+    //return app.cur_ticks_ms;
 }
 
 //== FILE SYSTEM OVERRIDE ======================================================
