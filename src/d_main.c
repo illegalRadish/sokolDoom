@@ -412,7 +412,6 @@ void D_DoomLoop (void)
 
     main_loop_started = true;
 
-    // SOKOL CHANGE
     TryRunTics();
 
     I_SetWindowTitle(gamedescription);
@@ -431,8 +430,7 @@ void D_DoomLoop (void)
         wipegamestate = gamestate;
     }
 
-    // SOKOL CHANGE
-    /*
+    /* SOKOL CHANGE: moved into D_DoomFrame()
     while (1)
     {
 		// frame syncronous IO operations
