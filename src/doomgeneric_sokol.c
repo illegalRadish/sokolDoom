@@ -204,6 +204,7 @@ void frame(void) {
 }
 
 void cleanup(void) {
+    sfetch_shutdown();
     sdtx_shutdown();
     sg_shutdown();
 }
@@ -255,7 +256,6 @@ static wad_file_t* W_MemIO_OpenFile(char* path) {
         return 0;
     }
 
-    // Create a new stdc_wad_file_t to hold the file handle.
     memio_wad_file_t* result = Z_Malloc(sizeof(memio_wad_file_t), PU_STATIC, 0);
     result->wad.file_class = &memio_wad_file;
     result->wad.mapped = NULL;
