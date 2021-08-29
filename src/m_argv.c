@@ -72,6 +72,7 @@ int M_CheckParm(char *check)
 
 #define MAXARGVS        100
 
+/* SOKOL CHANGE
 static void LoadResponseFile(int argv_index)
 {
 #if ORIGCODE
@@ -227,10 +228,14 @@ static void LoadResponseFile(int argv_index)
 #endif
 #endif
 }
+*/
 
 //
 // Find a Response File
 //
+
+/*
+SOKOL CHANGE
 
 void M_FindResponseFile(void)
 {
@@ -244,6 +249,7 @@ void M_FindResponseFile(void)
         }
     }
 }
+*/
 
 // Return the name of the executable used to start the program:
 
