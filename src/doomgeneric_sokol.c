@@ -12,6 +12,7 @@
 #include "sokol_glue.h"
 #include "m_argv.h"
 #include "doomgeneric.h"
+#include "doomkeys.h"
 #include <assert.h>
 #include "shaders.glsl.h"
 
@@ -20,12 +21,19 @@ void D_DoomLoop(void);
 void D_DoomFrame(void);
 void dg_Create();
 
+#define KEY_QUEUE_SIZE (16)
+
 typedef enum {
     APP_STATE_LOADING,
     APP_STATE_INIT,
     APP_STATE_RUNNING,
     APP_STATE_LOADING_FAILED,
 } app_state_t;
+
+typedef struct {
+    uint8_t key_code;
+    bool pressed;
+} key_state_t;
 
 static struct {
     app_state_t state;
@@ -34,6 +42,9 @@ static struct {
     sg_buffer vbuf;
     sg_image img;
     sg_pipeline pip;
+    key_state_t key_queue[KEY_QUEUE_SIZE];
+    uint32_t key_write_index;
+    uint32_t key_read_index;
 } app;
 
 #define MAX_WAD_SIZE (6 * 1024 * 1024)
@@ -215,9 +226,125 @@ void cleanup(void) {
     sg_shutdown();
 }
 
+static uint8_t to_doom_key(sapp_keycode key, uint32_t modifiers) {
+    switch (key) {
+        case SAPP_KEYCODE_A:
+            return KEY_STRAFE_L;
+        case SAPP_KEYCODE_D:
+            return KEY_STRAFE_R;
+        case SAPP_KEYCODE_W:
+        case SAPP_KEYCODE_UP:
+            return KEY_UPARROW;
+        case SAPP_KEYCODE_S:
+        case SAPP_KEYCODE_DOWN:
+            return KEY_DOWNARROW;
+        case SAPP_KEYCODE_LEFT:
+            return KEY_LEFTARROW;
+        case SAPP_KEYCODE_RIGHT:
+            return KEY_RIGHTARROW;
+        case SAPP_KEYCODE_E:
+            return KEY_USE;
+        case SAPP_KEYCODE_SPACE:
+            return KEY_FIRE;
+        case SAPP_KEYCODE_ESCAPE:
+            return KEY_ESCAPE;
+        case SAPP_KEYCODE_ENTER:
+            return KEY_ENTER;
+        case SAPP_KEYCODE_TAB:
+            return KEY_TAB;
+        default:
+            return 0;
+    }
+}
+
+static void push_key(uint8_t key_code, bool pressed) {
+    if (key_code != 0) {
+        assert(app.key_write_index < KEY_QUEUE_SIZE);
+        app.key_queue[app.key_write_index] = (key_state_t) {
+            .key_code = key_code,
+            .pressed = pressed
+        };
+        app.key_write_index = (app.key_write_index + 1) % KEY_QUEUE_SIZE;
+    }
+}
+
+static key_state_t pull_key(void) {
+    if (app.key_read_index == app.key_write_index) {
+        return (key_state_t){0};
+    }
+    else {
+        assert(app.key_read_index < KEY_QUEUE_SIZE);
+        key_state_t res = app.key_queue[app.key_read_index];
+        app.key_read_index = (app.key_read_index + 1) % KEY_QUEUE_SIZE;
+        return res;
+    }
+}
+
 void input(const sapp_event* ev) {
-    // FIXME
-    (void)ev;
+    if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
+        bool pressed = (ev->type == SAPP_EVENTTYPE_KEY_DOWN);
+        switch (ev->key_code) {
+            case SAPP_KEYCODE_W:
+            case SAPP_KEYCODE_UP:
+                push_key(KEY_UPARROW, pressed);
+                break;
+            case SAPP_KEYCODE_S:
+            case SAPP_KEYCODE_DOWN:
+                push_key(KEY_DOWNARROW, pressed);
+                break;
+            case SAPP_KEYCODE_A:
+            case SAPP_KEYCODE_LEFT:
+                if (pressed) {
+                    if (ev->modifiers & SAPP_MODIFIER_ALT) {
+                        push_key(KEY_STRAFE_L, true);
+                    }
+                    else {
+                        push_key(KEY_LEFTARROW, true);
+                    }
+                }
+                else {
+                    push_key(KEY_STRAFE_L, false);
+                    push_key(KEY_LEFTARROW, false);
+                }
+                break;
+            case SAPP_KEYCODE_D:
+            case SAPP_KEYCODE_RIGHT:
+                if (pressed) {
+                    if (ev->modifiers & SAPP_MODIFIER_ALT) {
+                        push_key(KEY_STRAFE_R, true);
+                    }
+                    else {
+                        push_key(KEY_RIGHTARROW, true);
+                    }
+                }
+                else {
+                    push_key(KEY_STRAFE_R, false);
+                    push_key(KEY_RIGHTARROW, false);
+                }
+                break;
+            case SAPP_KEYCODE_SPACE:
+                push_key(KEY_USE, pressed);
+                break;
+            case SAPP_KEYCODE_LEFT_CONTROL:
+                push_key(KEY_FIRE, pressed);
+                break;
+            case SAPP_KEYCODE_ESCAPE:
+                push_key(KEY_ESCAPE, pressed);
+                break;
+            case SAPP_KEYCODE_ENTER:
+                push_key(KEY_ENTER, pressed);
+                break;
+            case SAPP_KEYCODE_TAB:
+                push_key(KEY_TAB, pressed);
+                break;
+            case SAPP_KEYCODE_LEFT_SHIFT:
+            case SAPP_KEYCODE_RIGHT_SHIFT:
+                push_key(KEY_RSHIFT, pressed);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 sapp_desc sokol_main(int argc, char* argv[]) {
@@ -257,8 +384,16 @@ void DG_SetWindowTitle(const char* title) {
 }
 
 int DG_GetKey(int* pressed, unsigned char* doomKey) {
-    // FIXME
-    return 0;
+    key_state_t key_state = pull_key();
+    if (key_state.key_code != 0) {
+        *doomKey = key_state.key_code;
+        *pressed = key_state.pressed ? 1 : 0;
+        return 1;
+    }
+    else {
+        // no key available
+        return 0;
+    }
 }
 
 // the sleep function is used in blocking wait loops, those don't
