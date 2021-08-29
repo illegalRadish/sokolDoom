@@ -226,37 +226,6 @@ void cleanup(void) {
     sg_shutdown();
 }
 
-static uint8_t to_doom_key(sapp_keycode key, uint32_t modifiers) {
-    switch (key) {
-        case SAPP_KEYCODE_A:
-            return KEY_STRAFE_L;
-        case SAPP_KEYCODE_D:
-            return KEY_STRAFE_R;
-        case SAPP_KEYCODE_W:
-        case SAPP_KEYCODE_UP:
-            return KEY_UPARROW;
-        case SAPP_KEYCODE_S:
-        case SAPP_KEYCODE_DOWN:
-            return KEY_DOWNARROW;
-        case SAPP_KEYCODE_LEFT:
-            return KEY_LEFTARROW;
-        case SAPP_KEYCODE_RIGHT:
-            return KEY_RIGHTARROW;
-        case SAPP_KEYCODE_E:
-            return KEY_USE;
-        case SAPP_KEYCODE_SPACE:
-            return KEY_FIRE;
-        case SAPP_KEYCODE_ESCAPE:
-            return KEY_ESCAPE;
-        case SAPP_KEYCODE_ENTER:
-            return KEY_ENTER;
-        case SAPP_KEYCODE_TAB:
-            return KEY_TAB;
-        default:
-            return 0;
-    }
-}
-
 static void push_key(uint8_t key_code, bool pressed) {
     if (key_code != 0) {
         assert(app.key_write_index < KEY_QUEUE_SIZE);
@@ -340,6 +309,27 @@ void input(const sapp_event* ev) {
             case SAPP_KEYCODE_LEFT_SHIFT:
             case SAPP_KEYCODE_RIGHT_SHIFT:
                 push_key(KEY_RSHIFT, pressed);
+                break;
+            case SAPP_KEYCODE_1:
+                push_key('1', pressed);
+                break;
+            case SAPP_KEYCODE_2:
+                push_key('2', pressed);
+                break;
+            case SAPP_KEYCODE_3:
+                push_key('3', pressed);
+                break;
+            case SAPP_KEYCODE_4:
+                push_key('4', pressed);
+                break;
+            case SAPP_KEYCODE_5:
+                push_key('5', pressed);
+                break;
+            case SAPP_KEYCODE_6:
+                push_key('6', pressed);
+                break;
+            case SAPP_KEYCODE_7:
+                push_key('7', pressed);
                 break;
             default:
                 break;
