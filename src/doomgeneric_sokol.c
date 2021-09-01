@@ -271,6 +271,7 @@ static key_state_t pull_key(void) {
 void input(const sapp_event* ev) {
     if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
         bool pressed = (ev->type == SAPP_EVENTTYPE_KEY_DOWN);
+        bool consume_event = true;
         switch (ev->key_code) {
             case SAPP_KEYCODE_W:
             case SAPP_KEYCODE_UP:
@@ -351,7 +352,11 @@ void input(const sapp_event* ev) {
                 push_key('7', pressed);
                 break;
             default:
+                consume_event = false;
                 break;
+        }
+        if (consume_event) {
+            sapp_consume_event();
         }
     }
 }
