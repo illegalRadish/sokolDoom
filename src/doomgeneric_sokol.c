@@ -21,7 +21,7 @@ void D_DoomLoop(void);
 void D_DoomFrame(void);
 void dg_Create();
 
-#define KEY_QUEUE_SIZE (16)
+#define KEY_QUEUE_SIZE (32)
 
 typedef enum {
     APP_STATE_LOADING,
@@ -269,7 +269,29 @@ static key_state_t pull_key(void) {
 }
 
 void input(const sapp_event* ev) {
-    if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
+    if (ev->type == SAPP_EVENTTYPE_UNFOCUSED) {
+        // clear all input when window loses focus
+        push_key(KEY_UPARROW, false);
+        push_key(KEY_DOWNARROW, false);
+        push_key(KEY_LEFTARROW, false);
+        push_key(KEY_RIGHTARROW, false);
+        push_key(KEY_STRAFE_L, false);
+        push_key(KEY_STRAFE_R, false);
+        push_key(KEY_FIRE, false);
+        push_key(KEY_USE, false);
+        push_key(KEY_TAB, false);
+        push_key(KEY_RSHIFT, false);
+        push_key(KEY_ESCAPE, false);
+        push_key(KEY_ENTER, false);
+        push_key('1', false);
+        push_key('2', false);
+        push_key('3', false);
+        push_key('4', false);
+        push_key('5', false);
+        push_key('6', false);
+        push_key('7', false);
+    }
+    else if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
         bool pressed = (ev->type == SAPP_EVENTTYPE_KEY_DOWN);
         bool consume_event = true;
         switch (ev->key_code) {
