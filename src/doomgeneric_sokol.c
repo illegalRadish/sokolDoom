@@ -25,6 +25,7 @@ void dg_Create();
 
 typedef enum {
     APP_STATE_LOADING,
+    APP_STATE_WAITING,
     APP_STATE_INIT,
     APP_STATE_RUNNING,
     APP_STATE_LOADING_FAILED,
@@ -52,7 +53,7 @@ static uint8_t wad_buffer[MAX_WAD_SIZE];
 void fetch_callback(const sfetch_response_t* response) {
     if (response->fetched) {
         wad_size = response->fetched_size;
-        app.state = APP_STATE_INIT;
+        app.state = APP_STATE_WAITING;
     }
     else if (response->failed) {
         app.state = APP_STATE_LOADING_FAILED;
@@ -72,7 +73,7 @@ void init(void) {
     });
     sdtx_setup(&(sdtx_desc_t){
         .context_pool_size = 1,
-        .fonts[0] = sdtx_font_kc853(),
+        .fonts[0] = sdtx_font_kc854(),
     });
     sfetch_setup(&(sfetch_desc_t){
         .max_requests = 1,
@@ -128,45 +129,69 @@ void init(void) {
     app.state = APP_STATE_LOADING;
 }
 
-// draw a simple loading message during async WAD file loading
-static void draw_loading_screen(void) {
-    const float w = sapp_widthf();
-    const float h = sapp_heightf();
+static void begin_init_screen(void) {
+    sdtx_canvas(sapp_widthf(), sapp_height() * 0.5f);
+    sdtx_origin(2.0f, 1.0f);
+}
 
-    sdtx_canvas(w * 0.25f, h * 0.25f);
-    sdtx_pos(1.0f, 1.0f);
-    sdtx_puts("LOADING");
-    for (int i = 0; i < ((sapp_frame_count() / 20) & 3); i++) {
-        sdtx_putc('.');
-    }
-
-    const sg_pass_action pass_action = {
+static void end_init_screen(void) {
+    sg_pass_action pass_action = {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.0f, 0.0f, 0.0f, 1.0f } }
     };
-    sg_begin_default_passf(&pass_action, w, h);
+    if (app.state == APP_STATE_LOADING_FAILED) {
+        // red background color if loading has failed
+        pass_action.colors[0].value = (sg_color) { 1.0f, 0.0f, 0.0f, 1.0f };
+    }
+    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
     sdtx_draw();
     sg_end_pass();
     sg_commit();
 }
 
+static void draw_greeting_message(void) {
+    sdtx_color3f(0.75f, 0.75f, 0.75f);
+    sdtx_puts("*** DOOM (shareware, no sound) ***\n\n");
+    sdtx_puts("Ported to the sokol headers.\n\n");
+    sdtx_puts("Controls:\n");
+    sdtx_puts("=========\n\n");
+    sdtx_puts("Arrow keys:     move and turn\n\n");
+    sdtx_puts("Alt+arrow keys: move and strafe\n\n");
+    sdtx_puts("AWSD:           move and strafe\n\n");
+    sdtx_puts("Shift:          run\n\n");
+    sdtx_puts("1 - 7:          select weapon\n\n");
+    sdtx_puts("Ctrl:           fire weapon\n\n");
+    sdtx_puts("Space:          use door\n\n");
+    sdtx_puts("\n");
+}
+
+// draw a simple loading message during async WAD file loading
+static void draw_loading_screen(void) {
+    begin_init_screen();
+    draw_greeting_message();
+    sdtx_puts("Loading DOOM1.WAD");
+    for (int i = 0; i < ((sapp_frame_count() / 20) & 3); i++) {
+        sdtx_putc('.');
+    }
+    end_init_screen();
+}
+
+// draw the greeting screen with a 'press key to start' message
+static void draw_waiting_screen(void) {
+    begin_init_screen();
+    draw_greeting_message();
+    if ((sapp_frame_count() / 20) & 1) {
+        sdtx_puts("Press any key to start game!");
+    }
+    end_init_screen();
+}
+
 // draw an error screen if WAD file loading failed
 static void draw_loading_failed_screen(void) {
-    const float w = sapp_widthf();
-    const float h = sapp_heightf();
-
-    sdtx_canvas(w * 0.25f, h * 0.25f);
-    sdtx_pos(1.0f, 1.0f);
+    begin_init_screen();
     if ((sapp_frame_count() / 20) & 1) {
         sdtx_puts("LOADING FAILED!");
     }
-
-    const sg_pass_action pass_action = {
-        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 1.0f, 0.0f, 0.0f, 1.0f } }
-    };
-    sg_begin_default_passf(&pass_action, w, h);
-    sdtx_draw();
-    sg_end_pass();
-    sg_commit();
+    end_init_screen();
 }
 
 // helper function to adjust aspect ratio
@@ -218,7 +243,9 @@ void frame(void) {
         case APP_STATE_LOADING:
             draw_loading_screen();
             break;
-
+        case APP_STATE_WAITING:
+            draw_waiting_screen();
+            break;
         case APP_STATE_INIT:
             dg_Create();
             // D_DoomMain() without the trailing call to D_DoomLoop()
@@ -269,116 +296,126 @@ static key_state_t pull_key(void) {
 }
 
 void input(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_UNFOCUSED) {
-        // clear all input when window loses focus
-        push_key(KEY_UPARROW, false);
-        push_key(KEY_DOWNARROW, false);
-        push_key(KEY_LEFTARROW, false);
-        push_key(KEY_RIGHTARROW, false);
-        push_key(KEY_STRAFE_L, false);
-        push_key(KEY_STRAFE_R, false);
-        push_key(KEY_FIRE, false);
-        push_key(KEY_USE, false);
-        push_key(KEY_TAB, false);
-        push_key(KEY_RSHIFT, false);
-        push_key(KEY_ESCAPE, false);
-        push_key(KEY_ENTER, false);
-        push_key('1', false);
-        push_key('2', false);
-        push_key('3', false);
-        push_key('4', false);
-        push_key('5', false);
-        push_key('6', false);
-        push_key('7', false);
-    }
-    else if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
-        bool pressed = (ev->type == SAPP_EVENTTYPE_KEY_DOWN);
-        bool consume_event = true;
-        switch (ev->key_code) {
-            case SAPP_KEYCODE_W:
-            case SAPP_KEYCODE_UP:
-                push_key(KEY_UPARROW, pressed);
-                break;
-            case SAPP_KEYCODE_S:
-            case SAPP_KEYCODE_DOWN:
-                push_key(KEY_DOWNARROW, pressed);
-                break;
-            case SAPP_KEYCODE_A:
-            case SAPP_KEYCODE_LEFT:
-                if (pressed) {
-                    if (ev->modifiers & SAPP_MODIFIER_ALT) {
-                        push_key(KEY_STRAFE_L, true);
-                    }
-                    else {
-                        push_key(KEY_LEFTARROW, true);
-                    }
-                }
-                else {
-                    push_key(KEY_STRAFE_L, false);
-                    push_key(KEY_LEFTARROW, false);
-                }
-                break;
-            case SAPP_KEYCODE_D:
-            case SAPP_KEYCODE_RIGHT:
-                if (pressed) {
-                    if (ev->modifiers & SAPP_MODIFIER_ALT) {
-                        push_key(KEY_STRAFE_R, true);
-                    }
-                    else {
-                        push_key(KEY_RIGHTARROW, true);
-                    }
-                }
-                else {
-                    push_key(KEY_STRAFE_R, false);
-                    push_key(KEY_RIGHTARROW, false);
-                }
-                break;
-            case SAPP_KEYCODE_SPACE:
-                push_key(KEY_USE, pressed);
-                break;
-            case SAPP_KEYCODE_LEFT_CONTROL:
-                push_key(KEY_FIRE, pressed);
-                break;
-            case SAPP_KEYCODE_ESCAPE:
-                push_key(KEY_ESCAPE, pressed);
-                break;
-            case SAPP_KEYCODE_ENTER:
-                push_key(KEY_ENTER, pressed);
-                break;
-            case SAPP_KEYCODE_TAB:
-                push_key(KEY_TAB, pressed);
-                break;
-            case SAPP_KEYCODE_LEFT_SHIFT:
-            case SAPP_KEYCODE_RIGHT_SHIFT:
-                push_key(KEY_RSHIFT, pressed);
-                break;
-            case SAPP_KEYCODE_1:
-                push_key('1', pressed);
-                break;
-            case SAPP_KEYCODE_2:
-                push_key('2', pressed);
-                break;
-            case SAPP_KEYCODE_3:
-                push_key('3', pressed);
-                break;
-            case SAPP_KEYCODE_4:
-                push_key('4', pressed);
-                break;
-            case SAPP_KEYCODE_5:
-                push_key('5', pressed);
-                break;
-            case SAPP_KEYCODE_6:
-                push_key('6', pressed);
-                break;
-            case SAPP_KEYCODE_7:
-                push_key('7', pressed);
-                break;
-            default:
-                consume_event = false;
-                break;
+    if (app.state == APP_STATE_WAITING) {
+        if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) ||
+            (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) ||
+            (ev->type == SAPP_EVENTTYPE_TOUCHES_BEGAN))
+        {
+            app.state = APP_STATE_INIT;
         }
-        if (consume_event) {
-            sapp_consume_event();
+    }
+    else if (app.state == APP_STATE_RUNNING) {
+        if (ev->type == SAPP_EVENTTYPE_UNFOCUSED) {
+            // clear all input when window loses focus
+            push_key(KEY_UPARROW, false);
+            push_key(KEY_DOWNARROW, false);
+            push_key(KEY_LEFTARROW, false);
+            push_key(KEY_RIGHTARROW, false);
+            push_key(KEY_STRAFE_L, false);
+            push_key(KEY_STRAFE_R, false);
+            push_key(KEY_FIRE, false);
+            push_key(KEY_USE, false);
+            push_key(KEY_TAB, false);
+            push_key(KEY_RSHIFT, false);
+            push_key(KEY_ESCAPE, false);
+            push_key(KEY_ENTER, false);
+            push_key('1', false);
+            push_key('2', false);
+            push_key('3', false);
+            push_key('4', false);
+            push_key('5', false);
+            push_key('6', false);
+            push_key('7', false);
+        }
+        else if ((ev->type == SAPP_EVENTTYPE_KEY_DOWN) || (ev->type == SAPP_EVENTTYPE_KEY_UP)) {
+            bool pressed = (ev->type == SAPP_EVENTTYPE_KEY_DOWN);
+            bool consume_event = true;
+            switch (ev->key_code) {
+                case SAPP_KEYCODE_W:
+                case SAPP_KEYCODE_UP:
+                    push_key(KEY_UPARROW, pressed);
+                    break;
+                case SAPP_KEYCODE_S:
+                case SAPP_KEYCODE_DOWN:
+                    push_key(KEY_DOWNARROW, pressed);
+                    break;
+                case SAPP_KEYCODE_A:
+                case SAPP_KEYCODE_LEFT:
+                    if (pressed) {
+                        if (ev->modifiers & SAPP_MODIFIER_ALT) {
+                            push_key(KEY_STRAFE_L, true);
+                        }
+                        else {
+                            push_key(KEY_LEFTARROW, true);
+                        }
+                    }
+                    else {
+                        push_key(KEY_STRAFE_L, false);
+                        push_key(KEY_LEFTARROW, false);
+                    }
+                    break;
+                case SAPP_KEYCODE_D:
+                case SAPP_KEYCODE_RIGHT:
+                    if (pressed) {
+                        if (ev->modifiers & SAPP_MODIFIER_ALT) {
+                            push_key(KEY_STRAFE_R, true);
+                        }
+                        else {
+                            push_key(KEY_RIGHTARROW, true);
+                        }
+                    }
+                    else {
+                        push_key(KEY_STRAFE_R, false);
+                        push_key(KEY_RIGHTARROW, false);
+                    }
+                    break;
+                case SAPP_KEYCODE_SPACE:
+                    push_key(KEY_USE, pressed);
+                    break;
+                case SAPP_KEYCODE_LEFT_CONTROL:
+                    push_key(KEY_FIRE, pressed);
+                    break;
+                case SAPP_KEYCODE_ESCAPE:
+                    push_key(KEY_ESCAPE, pressed);
+                    break;
+                case SAPP_KEYCODE_ENTER:
+                    push_key(KEY_ENTER, pressed);
+                    break;
+                case SAPP_KEYCODE_TAB:
+                    push_key(KEY_TAB, pressed);
+                    break;
+                case SAPP_KEYCODE_LEFT_SHIFT:
+                case SAPP_KEYCODE_RIGHT_SHIFT:
+                    push_key(KEY_RSHIFT, pressed);
+                    break;
+                case SAPP_KEYCODE_1:
+                    push_key('1', pressed);
+                    break;
+                case SAPP_KEYCODE_2:
+                    push_key('2', pressed);
+                    break;
+                case SAPP_KEYCODE_3:
+                    push_key('3', pressed);
+                    break;
+                case SAPP_KEYCODE_4:
+                    push_key('4', pressed);
+                    break;
+                case SAPP_KEYCODE_5:
+                    push_key('5', pressed);
+                    break;
+                case SAPP_KEYCODE_6:
+                    push_key('6', pressed);
+                    break;
+                case SAPP_KEYCODE_7:
+                    push_key('7', pressed);
+                    break;
+                default:
+                    consume_event = false;
+                    break;
+            }
+            if (consume_event) {
+                sapp_consume_event();
+            }
         }
     }
 }
@@ -394,8 +431,8 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = DOOMGENERIC_RESX,
-        .height = DOOMGENERIC_RESY,
+        .width = DOOMGENERIC_RESX * 2,
+        .height = DOOMGENERIC_RESY * 2,
         .window_title = "Sokol Doom Shareware",
         .icon.sokol_default = true,
     };

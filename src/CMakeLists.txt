@@ -113,6 +113,7 @@ fips_end_app()
 
 if (FIPS_CLANG)
     target_compile_options(doom PRIVATE 
+        -Wno-unknown-warning-option
         -Wno-sign-compare
         -Wno-unused-parameter
         -Wno-unused-const-variable
