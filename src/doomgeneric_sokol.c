@@ -12,6 +12,7 @@
 #include "sokol_glue.h"
 #include "m_argv.h"
 #include "d_event.h"
+#include "i_video.h"
 #include "doomgeneric.h"
 #include "doomkeys.h"
 #include <assert.h>
@@ -48,6 +49,8 @@ static struct {
     key_state_t key_queue[KEY_QUEUE_SIZE];
     uint32_t key_write_index;
     uint32_t key_read_index;
+    uint32_t mouse_button_state;
+    uint32_t delayed_mouse_button_up;
 } app;
 
 #define MAX_WAD_SIZE (6 * 1024 * 1024)
@@ -257,9 +260,20 @@ void frame(void) {
             app.state = APP_STATE_RUNNING;
             // fallthough!
         case APP_STATE_RUNNING:
+            // handle delayed mouse-button-up (see SAPP_EVENTTYPE_MOUSE_UP handling)
             // FIXME: run D_DoomFrame at actual 30 fps, regardless of display refresh rate
             if (sapp_frame_count() & 1) {
                 D_DoomFrame();
+                // this prevents that very short mouse button taps on touchpads
+                // are not deteced
+                if (app.delayed_mouse_button_up != 0) {
+                    app.mouse_button_state &= ~app.delayed_mouse_button_up;
+                    app.delayed_mouse_button_up = 0;
+                    D_PostEvent(&(event_t){
+                        .type = ev_mouse,
+                        .data1 = app.mouse_button_state
+                    });
+                }
             }
             draw_game_frame();
             break;
@@ -296,6 +310,20 @@ static key_state_t pull_key(void) {
         key_state_t res = app.key_queue[app.key_read_index];
         app.key_read_index = (app.key_read_index + 1) % KEY_QUEUE_SIZE;
         return res;
+    }
+}
+
+// originally in i_video.c
+static int AccelerateMouse(int val) {
+    if (val < 0) {
+        return -AccelerateMouse(-val);
+    }
+    if (val > mouse_threshold) {
+        return (int)((val - mouse_threshold) * mouse_acceleration + mouse_threshold);
+    }
+    else
+    {
+        return val;
     }
 }
 
@@ -431,27 +459,24 @@ void input(const sapp_event* ev) {
                 sapp_consume_event();
             }
         }
-        else if ((ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) ||
-                 (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) ||
-                 (ev->type == SAPP_EVENTTYPE_MOUSE_UP))
-        {
-            uint32_t mouse_button_state = 0;
-            if (0 != (ev->modifiers & SAPP_MODIFIER_LMB)) {
-                mouse_button_state |= 1;
-            }
-            if (0 != (ev->modifiers & SAPP_MODIFIER_RMB)) {
-                mouse_button_state |= 2;
-            }
-            if (0 != (ev->modifiers & SAPP_MODIFIER_MMB)) {
-                mouse_button_state |= 4;
-            }
-            event_t doom_event = {
+        else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
+            app.mouse_button_state |= (1<<ev->mouse_button);
+            D_PostEvent(&(event_t){
                 .type = ev_mouse,
-                .data1 = mouse_button_state,
-                .data2 = ev->mouse_dx * 5,
-                .data3 = 0,
-            };
-            D_PostEvent(&doom_event);
+                .data1 = app.mouse_button_state,
+            });
+        }
+        else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
+            // delay mouse up to the next frame so that short
+            // taps on touch pads are registered
+            app.delayed_mouse_button_up |= (1<<ev->mouse_button);
+        }
+        else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
+            D_PostEvent(&(event_t){
+                .type = ev_mouse,
+                .data1 = app.mouse_button_state,
+                .data2 = AccelerateMouse(ev->mouse_dx),
+            });
         }
     }
 }
