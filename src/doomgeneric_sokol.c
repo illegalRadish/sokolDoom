@@ -145,10 +145,6 @@ static void end_init_screen(void) {
     sg_pass_action pass_action = {
         .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.0f, 0.0f, 0.0f, 1.0f } }
     };
-    if (app.state == APP_STATE_LOADING_FAILED) {
-        // red background color if loading has failed
-        pass_action.colors[0].value = (sg_color) { 1.0f, 0.0f, 0.0f, 1.0f };
-    }
     sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
     sdtx_draw();
     sg_end_pass();
@@ -159,6 +155,7 @@ static void draw_greeting_message(void) {
     sdtx_color3f(0.75f, 0.75f, 0.75f);
     sdtx_puts("*** DOOM (shareware, no sound) ***\n\n");
     sdtx_puts("Ported to the sokol headers.\n\n");
+    sdtx_puts("Project URL: https://github.com/floooh/doom-sokol\n\n");
     sdtx_puts("Controls:\n");
     sdtx_puts("=========\n\n");
     sdtx_puts("Arrow keys:     move and turn\n\n");
@@ -195,8 +192,10 @@ static void draw_waiting_screen(void) {
 // draw an error screen if WAD file loading failed
 static void draw_loading_failed_screen(void) {
     begin_init_screen();
+    draw_greeting_message();
     if ((sapp_frame_count() / 20) & 1) {
-        sdtx_puts("LOADING FAILED!");
+        sdtx_color3b(255, 0, 0);
+        sdtx_puts("LOADING DOOM1.WAD FAILED!");
     }
     end_init_screen();
 }
@@ -492,8 +491,8 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = DOOMGENERIC_RESX * 2,
-        .height = DOOMGENERIC_RESY * 2,
+        .width = DOOMGENERIC_RESX * 3,
+        .height = DOOMGENERIC_RESY * 3,
         .window_title = "Sokol Doom Shareware",
         .icon.sokol_default = true,
     };
