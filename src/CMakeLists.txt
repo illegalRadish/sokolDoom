@@ -112,5 +112,12 @@ fips_begin_app(doom windowed)
 fips_end_app()
 
 if (FIPS_CLANG)
-    target_compile_options(doom PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-unused-const-variable)
+    target_compile_options(doom PRIVATE 
+        -Wno-sign-compare
+        -Wno-unused-parameter
+        -Wno-unused-const-variable
+        -Wno-unused-but-set-parameter
+        -Wno-unused-but-set-variable
+        -Wno-absolute-value
+    )
 endif()
