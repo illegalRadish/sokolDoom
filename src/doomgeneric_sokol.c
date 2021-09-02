@@ -166,7 +166,6 @@ static void draw_greeting_message(void) {
     sdtx_puts("1 - 7:          select weapon\n\n");
     sdtx_puts("Ctrl / LMB:     fire weapon\n\n");
     sdtx_puts("Space:          use door\n\n");
-    sdtx_puts("Mouse move:     turn left/right\n\n");
     sdtx_puts("\n");
 }
 
