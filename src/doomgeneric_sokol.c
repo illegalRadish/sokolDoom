@@ -11,10 +11,14 @@
 #include "sokol_fetch.h"
 #include "sokol_glue.h"
 #include "m_argv.h"
+#include "d_event.h"
 #include "doomgeneric.h"
 #include "doomkeys.h"
 #include <assert.h>
 #include "shaders.glsl.h"
+
+// in m_menu.c
+extern boolean menuactive;
 
 void D_DoomMain(void);
 void D_DoomLoop(void);
@@ -305,6 +309,12 @@ void input(const sapp_event* ev) {
         }
     }
     else if (app.state == APP_STATE_RUNNING) {
+        if (menuactive && sapp_mouse_locked()) {
+            sapp_lock_mouse(false);
+        }
+        if (!menuactive && !sapp_mouse_locked()) {
+            sapp_lock_mouse(true);
+        }
         if (ev->type == SAPP_EVENTTYPE_UNFOCUSED) {
             // clear all input when window loses focus
             push_key(KEY_UPARROW, false);
@@ -416,6 +426,28 @@ void input(const sapp_event* ev) {
             if (consume_event) {
                 sapp_consume_event();
             }
+        }
+        else if ((ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) ||
+                 (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) ||
+                 (ev->type == SAPP_EVENTTYPE_MOUSE_UP))
+        {
+            uint32_t mouse_button_state = 0;
+            if (0 != (ev->modifiers & SAPP_MODIFIER_LMB)) {
+                mouse_button_state |= 1;
+            }
+            if (0 != (ev->modifiers & SAPP_MODIFIER_RMB)) {
+                mouse_button_state |= 2;
+            }
+            if (0 != (ev->modifiers & SAPP_MODIFIER_MMB)) {
+                mouse_button_state |= 4;
+            }
+            event_t doom_event = {
+                .type = ev_mouse,
+                .data1 = mouse_button_state,
+                .data2 = ev->mouse_dx * 10,
+                .data3 = 0,
+            };
+            D_PostEvent(&doom_event);
         }
     }
 }
