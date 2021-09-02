@@ -349,7 +349,6 @@ void input(const sapp_event* ev) {
                 case SAPP_KEYCODE_DOWN:
                     push_key(KEY_DOWNARROW, pressed);
                     break;
-                case SAPP_KEYCODE_A:
                 case SAPP_KEYCODE_LEFT:
                     if (pressed) {
                         if (ev->modifiers & SAPP_MODIFIER_ALT) {
@@ -364,7 +363,6 @@ void input(const sapp_event* ev) {
                         push_key(KEY_LEFTARROW, false);
                     }
                     break;
-                case SAPP_KEYCODE_D:
                 case SAPP_KEYCODE_RIGHT:
                     if (pressed) {
                         if (ev->modifiers & SAPP_MODIFIER_ALT) {
@@ -378,6 +376,12 @@ void input(const sapp_event* ev) {
                         push_key(KEY_STRAFE_R, false);
                         push_key(KEY_RIGHTARROW, false);
                     }
+                    break;
+                case SAPP_KEYCODE_A:
+                    push_key(KEY_STRAFE_L, pressed);
+                    break;
+                case SAPP_KEYCODE_D:
+                    push_key(KEY_STRAFE_R, pressed);
                     break;
                 case SAPP_KEYCODE_SPACE:
                     push_key(KEY_USE, pressed);
@@ -444,7 +448,7 @@ void input(const sapp_event* ev) {
             event_t doom_event = {
                 .type = ev_mouse,
                 .data1 = mouse_button_state,
-                .data2 = ev->mouse_dx * 10,
+                .data2 = ev->mouse_dx * 5,
                 .data3 = 0,
             };
             D_PostEvent(&doom_event);
