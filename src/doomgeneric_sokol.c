@@ -159,12 +159,14 @@ static void draw_greeting_message(void) {
     sdtx_puts("Controls:\n");
     sdtx_puts("=========\n\n");
     sdtx_puts("Arrow keys:     move and turn\n\n");
+    sdtx_puts("Mouse move:     turn left/right\n\n");
     sdtx_puts("Alt+arrow keys: move and strafe\n\n");
     sdtx_puts("AWSD:           move and strafe\n\n");
     sdtx_puts("Shift:          run\n\n");
     sdtx_puts("1 - 7:          select weapon\n\n");
-    sdtx_puts("Ctrl:           fire weapon\n\n");
+    sdtx_puts("Ctrl / LMB:     fire weapon\n\n");
     sdtx_puts("Space:          use door\n\n");
+    sdtx_puts("Mouse move:     turn left/right\n\n");
     sdtx_puts("\n");
 }
 
