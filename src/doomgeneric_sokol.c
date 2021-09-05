@@ -558,7 +558,7 @@ typedef struct
 // at end of file!
 extern wad_file_class_t memio_wad_file;
 
-static wad_file_t* W_MemIO_OpenFile(char* path) {
+static wad_file_t* memio_OpenFile(char* path) {
     if (0 != strcmp(path, "DOOM1.WAD")) {
         return 0;
     }
@@ -576,20 +576,181 @@ static wad_file_t* W_MemIO_OpenFile(char* path) {
     return &result->wad;
 }
 
-static void W_MemIO_CloseFile(wad_file_t* wad) {
+static void memio_CloseFile(wad_file_t* wad) {
     memio_wad_file_t* memio_wad = (memio_wad_file_t*) wad;
     mem_fclose(memio_wad->fstream);
     Z_Free(memio_wad);
 }
 
-static size_t W_MemIO_Read(wad_file_t* wad, uint32_t offset, void* buffer, size_t buffer_len) {
+static size_t memio_Read(wad_file_t* wad, uint32_t offset, void* buffer, size_t buffer_len) {
     memio_wad_file_t* memio_wad = (memio_wad_file_t*) wad;
     mem_fseek(memio_wad->fstream, offset, MEM_SEEK_SET);
     return mem_fread(buffer, 1, buffer_len, memio_wad->fstream);
 }
 
 wad_file_class_t memio_wad_file = {
-    .OpenFile = W_MemIO_OpenFile,
-    .CloseFile = W_MemIO_CloseFile,
-    .Read = W_MemIO_Read,
+    .OpenFile = memio_OpenFile,
+    .CloseFile = memio_CloseFile,
+    .Read = memio_Read,
 };
+
+/*== SOUND SUPPORT ===========================================================*/
+#include "i_sound.h"
+
+static boolean snd_Init(boolean use_sfx_prefix) {
+    printf(">>> snd_Init(use_sfx_prefix:%s)\n", use_sfx_prefix ? "true":"false");
+    // FIXME
+    return true;
+}
+
+static void snd_Shutdown(void) {
+    printf(">>> snd_Shutdown()\n");
+    // FIXME
+}
+
+static int snd_GetSfxLumpNum(sfxinfo_t* sfxinfo) {
+    printf(">>> snd_GetSfxLumpNum(sfxinfo: %p)\n", sfxinfo);
+    // FIXME
+    return 0;
+}
+
+static void snd_Update(void) {
+//    printf(">>> snd_Update()\n");
+    // FIXME
+}
+
+static void snd_UpdateSoundParams(int channel, int vol, int sep) {
+    printf(">>> snd_UpdateSoundParams(channel:%d, vol:%d, sep:%d)\n", channel, vol, sep);
+    // FIXME
+}
+
+static int snd_StartSound(sfxinfo_t* sfxinfo, int channel, int vol, int sep) {
+    printf(">>> snd_StartSound(sfxinfo: %p, channel:%d, vol:%d, sep:%d\n", sfxinfo, channel, vol, sep);
+    // FIXME
+    return -1;
+}
+
+static void snd_StopSound(int channel) {
+    printf(">>> snd_StopSound(channel:%d)\n", channel);
+    // FIXME
+}
+
+static boolean snd_SoundIsPlaying(int channel) {
+    printf(">>> snd_SoundIsPlaying(channel:%d)\n", channel);
+    // FIXME
+    return false;
+}
+
+static void snd_CacheSounds(sfxinfo_t* sounds, int num_sounds) {
+    printf(">>> snd_CacheSounds(sounds:%p, num_sounds:%d)\n", sounds, num_sounds);
+    // FIXME
+}
+
+static snddevice_t sound_sokol_devices[] = {
+    SNDDEVICE_SB,
+    SNDDEVICE_PAS,
+    SNDDEVICE_GUS,
+    SNDDEVICE_WAVEBLASTER,
+    SNDDEVICE_SOUNDCANVAS,
+    SNDDEVICE_AWE32,
+};
+
+sound_module_t sound_sokol_module = {
+    .sound_devices = sound_sokol_devices,
+    .num_sound_devices = arrlen(sound_sokol_devices),
+    .Init = snd_Init,
+    .Shutdown = snd_Shutdown,
+    .GetSfxLumpNum = snd_GetSfxLumpNum,
+    .Update = snd_Update,
+    .UpdateSoundParams = snd_UpdateSoundParams,
+    .StartSound = snd_StartSound,
+    .StopSound = snd_StopSound,
+    .SoundIsPlaying = snd_SoundIsPlaying,
+    .CacheSounds = snd_CacheSounds,
+};
+
+/*== MUSIC SUPPORT ===========================================================*/
+static boolean mus_Init(void) {
+    printf(">>> mus_Init()\n");
+    // FIXME
+    return true;
+}
+
+static void mus_Shutdown(void) {
+    printf(">>> mus_Shutdown()\n");
+    // FIXME
+}
+
+static void mus_SetMusicVolume(int volume) {
+    printf(">>> mus_SetMusicVolume(volume:%d)", volume);
+    // FIXME
+}
+
+static void mus_PauseMusic(void) {
+    printf(">>> mus_PauseMusic()\n");
+    // FIXME
+}
+
+static void mus_ResumeMusic(void) {
+    printf(">>> mus_ResumeMusic()\n");
+    // FIXME
+}
+
+static void* mus_RegisterSong(void* data, int len) {
+    printf(">>> mus_RegisterSong(data:%p, len:%d)\n", data, len);
+    // FIXME
+    return 0;
+}
+
+static void mus_UnRegisterSong(void* handle) {
+    printf(">>> mus_UnRegisterSong(handle:%p)\n", handle);
+    // FIXME
+}
+
+static void mus_PlaySong(void* handle, boolean looping) {
+    printf(">>> mus_PlaySong(handle:%p, looping:%s)\n", handle, looping?"true":"false");
+    // FIXME
+}
+
+static void mus_StopSong(void) {
+    printf(">>> mus_StopSong()\n");
+    // FIXME
+}
+
+static boolean mus_MusicIsPlaying(void) {
+    printf(">>> mus_MusicIsPlaying()\n");
+    // FIXME
+    return false;
+}
+
+static void mus_Poll(void) {
+    printf(">>> mus_Poll()\n");
+    // FIXME
+}
+
+static snddevice_t music_sokol_devices[] = {
+    SNDDEVICE_PAS,
+    SNDDEVICE_GUS,
+    SNDDEVICE_WAVEBLASTER,
+    SNDDEVICE_SOUNDCANVAS,
+    SNDDEVICE_GENMIDI,
+    SNDDEVICE_AWE32,
+};
+
+music_module_t music_sokol_module = {
+    .sound_devices = music_sokol_devices,
+    .num_sound_devices = arrlen(music_sokol_devices),
+    .Init = mus_Init,
+    .Shutdown = mus_Shutdown,
+    .SetMusicVolume = mus_SetMusicVolume,
+    .PauseMusic = mus_PauseMusic,
+    .ResumeMusic = mus_ResumeMusic,
+    .RegisterSong = mus_RegisterSong,
+    .UnRegisterSong = mus_UnRegisterSong,
+    .PlaySong = mus_PlaySong,
+    .StopSong = mus_StopSong,
+    .MusicIsPlaying = mus_MusicIsPlaying,
+    .Poll = mus_Poll,
+};
+
+

@@ -63,10 +63,16 @@ int snd_sfxdevice = SNDDEVICE_SB;
 // Sound modules
 
 extern void I_InitTimidityConfig(void);
+
+// SOKOL CHANGE
+extern sound_module_t sound_sokol_module;
+extern music_module_t music_sokol_module;
+/*
 extern sound_module_t sound_sdl_module;
 extern sound_module_t sound_pcsound_module;
 extern music_module_t music_sdl_module;
 extern music_module_t music_opl_module;
+*/
 
 // For OPL module:
 
@@ -91,9 +97,11 @@ static int snd_mport = 0;
 
 static sound_module_t *sound_modules[] = 
 {
+// SOKOL CHANGE
 #ifdef FEATURE_SOUND
-    &sound_sdl_module,
-    &sound_pcsound_module,
+    &sound_sokol_module,
+    //&sound_sdl_module,
+    //&sound_pcsound_module,
 #endif
     NULL,
 };
@@ -102,9 +110,11 @@ static sound_module_t *sound_modules[] =
 
 static music_module_t *music_modules[] =
 {
+// SOKOL CHANGE
 #ifdef FEATURE_SOUND
-    &music_sdl_module,
-    &music_opl_module,
+    &music_sokol_module,
+    //&music_sdl_module,
+    //&music_opl_module,
 #endif
     NULL,
 };
