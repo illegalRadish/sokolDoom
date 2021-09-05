@@ -9,6 +9,7 @@
 #include "sokol_time.h"
 #include "sokol_debugtext.h"
 #include "sokol_fetch.h"
+#include "sokol_audio.h"
 #include "sokol_glue.h"
 #include "m_argv.h"
 #include "d_event.h"
@@ -17,6 +18,8 @@
 #include "doomkeys.h"
 #include <assert.h>
 #include "shaders.glsl.h"
+
+#include <stdio.h>
 
 // in m_menu.c
 extern boolean menuactive;
@@ -87,6 +90,11 @@ void init(void) {
         .num_channels = 1,
         .num_lanes = 1,
     });
+    saudio_setup(&(saudio_desc){
+        .sample_rate = 11025,
+        .num_channels = 2,
+    });
+    printf(">>> sokol_audio sample rate: %d, num channels: %d", saudio_sample_rate(), saudio_channels());
 
     // create sokol-gfx resources to render a fullscreen texture
 
@@ -285,6 +293,7 @@ void frame(void) {
 }
 
 void cleanup(void) {
+    saudio_shutdown();
     sfetch_shutdown();
     sdtx_shutdown();
     sg_shutdown();
@@ -595,55 +604,226 @@ wad_file_class_t memio_wad_file = {
 };
 
 /*== SOUND SUPPORT ===========================================================*/
+
+// see https://github.com/mattiasgustavsson/doom-crt/blob/main/linuxdoom-1.10/i_sound.c
+
 #include "i_sound.h"
+#include "w_wad.h"
+#include "sounds.h"
+
+#define SAMPLECOUNT (512)
+#define NUM_CHANNELS (8)
+
+typedef struct {
+    uint8_t* start_ptr;
+    uint8_t* end_ptr;
+    int sfxid;
+    int handle;
+    int* leftvol_lookup;
+    int* rightvol_lookup;
+} snd_channel_t;
+
+static struct {
+    bool use_sfx_prefix;
+    uint16_t cur_sfx_handle;
+    snd_channel_t channels[NUM_CHANNELS];
+    // padded sound data lengths
+    int lengths[NUMSFX];
+    int vol_lookup[128 * 256];
+} snd_state;
+
+// helper function to load sound data from WAD lump
+static void* snd_getsfx(const char* sfxname, int* len) {
+
+    char name[20];
+    snprintf(name, sizeof(name), "ds%s", sfxname);
+    int sfxlump;
+    if (W_CheckNumForName(name) == -1) {
+        sfxlump = W_GetNumForName("dspistol");
+    }
+    else {
+        sfxlump = W_GetNumForName(name);
+    }
+    const int size = W_LumpLength(sfxlump);
+
+    printf("...loading %s (lump: %d, %d bytes)\n", sfxname, sfxlump, size);
+
+    uint8_t* sfx = W_CacheLumpNum(sfxlump, PU_STATIC);
+
+    // pad the sound effect to the mixing buffer size
+    int paddedsize = ((size - 8 + (SAMPLECOUNT-1)) / SAMPLECOUNT) * SAMPLECOUNT;
+
+    // allocate from zone memory
+    uint8_t* paddedsfx = Z_Malloc(paddedsize+8, PU_STATIC, 0);
+
+    // copy and pad
+    memcpy(paddedsfx, sfx, size);
+    for (int i = size; i < (paddedsize+8); i++) {
+        paddedsfx[i] = 128;
+    }
+
+    // remove the cached lump
+    Z_Free(sfx);
+
+    *len = paddedsize;
+    return (paddedsfx+8);
+}
+
+// This function adds a sound to the list of currently active sounds,
+// which is maintained as a given number (eight, usually) of internal channels.
+// Returns a handle.
+//
+static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
+    assert((slot >= 0) && (slot < NUM_CHANNELS));
+    assert((sfxid >= 0) && (sfxid < NUMSFX));
+
+    // Chainsaw troubles.
+    // Play these sound effects only one at a time.
+    /*
+    if ((sfxid == sfx_sawup) ||
+        (sfxid == sfx_sawidl) ||
+        (sfxid == sfx_sawful) ||
+        (sfxid == sfx_sawhit) ||
+        (sfxid == sfx_stnmov) ||
+        (sfxid == sfx_pistol))
+    {
+        for (int i = 0; i < NUM_CHANNELS; i++) {
+            // active and using the same sfx?
+            if (snd_state.channels[i] && (snd_state.channelids[i] == sfxid)) {
+                // reset
+                snd_state.channels[i] = 0;
+                // FIXME: also reset other per-channel state
+                // we are sure that if, there will be only one
+                break;
+            }
+        }
+    }
+    */
+    snd_state.channels[slot].sfxid = sfxid;
+    snd_state.cur_sfx_handle += 1;
+    if (snd_state.cur_sfx_handle == 0) {
+        snd_state.cur_sfx_handle = 1;
+    }
+    snd_state.channels[slot].handle = (int)snd_state.cur_sfx_handle;
+    snd_state.channels[slot].start_ptr = S_sfx[sfxid].driver_data;
+    snd_state.channels[slot].end_ptr = snd_state.channels[slot].start_ptr + snd_state.lengths[sfxid];
+
+    // Separation, that is, orientation/stereo. range is: 1 - 256
+    separation += 1;
+
+    // Per left/right channel.
+    //  x^2 seperation,
+    //  adjust volume properly.
+    int left_sep = separation + 1;
+    int leftvol = volume - ((volume * left_sep * left_sep) >> 16);
+    assert((leftvol >= 0) && (leftvol <= 127));
+    int right_sep = separation - 256;
+    int rightvol = volume - ((volume * right_sep * right_sep) >> 16);
+    assert((rightvol >= 0) && (rightvol <= 127));
+
+    // Get the proper lookup table piece
+    //  for this volume level???
+    snd_state.channels[slot].leftvol_lookup = &snd_state.vol_lookup[leftvol * 256];
+    snd_state.channels[slot].rightvol_lookup = &snd_state.vol_lookup[rightvol * 256];
+
+    return snd_state.channels[slot].handle;
+}
 
 static boolean snd_Init(boolean use_sfx_prefix) {
     printf(">>> snd_Init(use_sfx_prefix:%s)\n", use_sfx_prefix ? "true":"false");
-    // FIXME
+    snd_state.use_sfx_prefix = use_sfx_prefix;
+    assert(snd_state.use_sfx_prefix);
+
+    // initialize volume lookup tables which also turn the unsigned samples into signed
+    for (int i = 0; i < 128; i++) {
+        for (int j = 0; j < 256; j++) {
+            snd_state.vol_lookup[i*256 + j] = (i*(j-128)*256)/127;
+        }
+    }
     return true;
 }
 
 static void snd_Shutdown(void) {
     printf(">>> snd_Shutdown()\n");
-    // FIXME
+    // nothing to do here
 }
 
-static int snd_GetSfxLumpNum(sfxinfo_t* sfxinfo) {
-    printf(">>> snd_GetSfxLumpNum(sfxinfo: %p)\n", sfxinfo);
-    // FIXME
-    return 0;
+static int snd_GetSfxLumpNum(sfxinfo_t* sfx) {
+    char namebuf[20];
+    if (snd_state.use_sfx_prefix) {
+        M_snprintf(namebuf, sizeof(namebuf), "dp%s", sfx->name);
+    }
+    else {
+        M_StringCopy(namebuf, sfx->name, sizeof(namebuf));
+    }
+    return W_GetNumForName(namebuf);
 }
 
 static void snd_Update(void) {
-//    printf(">>> snd_Update()\n");
     // FIXME
 }
 
-static void snd_UpdateSoundParams(int channel, int vol, int sep) {
-    printf(">>> snd_UpdateSoundParams(channel:%d, vol:%d, sep:%d)\n", channel, vol, sep);
+static void snd_UpdateSoundParams(int handle, int vol, int sep) {
+//    printf(">>> snd_UpdateSoundParams(handle:%d, vol:%d, sep:%d)\n", handle, vol, sep);
     // FIXME
 }
 
+// Starts a sound in a particular sound channel.
+//
+// Starting a sound means adding it
+//  to the current list of active sounds
+//  in the internal channels.
+// As the SFX info struct contains
+//  e.g. a pointer to the raw data,
+//  it is ignored.
+// As our sound handling does not handle
+//  priority, it is ignored.
+// Pitching (that is, increased speed of playback)
+//  is set, but currently not used by mixing.
+//
 static int snd_StartSound(sfxinfo_t* sfxinfo, int channel, int vol, int sep) {
-    printf(">>> snd_StartSound(sfxinfo: %p, channel:%d, vol:%d, sep:%d\n", sfxinfo, channel, vol, sep);
-    // FIXME
-    return -1;
+    int sfxid = sfxinfo - S_sfx;
+    assert((sfxid >= 0) && (sfxid < NUMSFX));
+    int handle = snd_addsfx(sfxid, channel, vol, sep);
+    printf(">>> snd_StartSound(sfxinfo: %p, channel:%d, vol:%d, sep:%d) => %d\n", sfxinfo, channel, vol, sep, handle);
+    return handle;
 }
 
-static void snd_StopSound(int channel) {
-    printf(">>> snd_StopSound(channel:%d)\n", channel);
+static void snd_StopSound(int handle) {
+    printf(">>> snd_StopSound(handle:%d)\n", handle);
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+        if (snd_state.channels[i].handle == handle) {
+            snd_state.channels[i] = (snd_channel_t){0};
+        }
+    }
     // FIXME
 }
 
-static boolean snd_SoundIsPlaying(int channel) {
-    printf(">>> snd_SoundIsPlaying(channel:%d)\n", channel);
-    // FIXME
+static boolean snd_SoundIsPlaying(int handle) {
+//    printf(">>> snd_SoundIsPlaying(handle:%d)\n", handle);
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+        if (snd_state.channels[i].handle == handle) {
+            return true;
+        }
+    }
     return false;
 }
 
 static void snd_CacheSounds(sfxinfo_t* sounds, int num_sounds) {
     printf(">>> snd_CacheSounds(sounds:%p, num_sounds:%d)\n", sounds, num_sounds);
-    // FIXME
+    for (int i = 0; i < num_sounds; i++) {
+        if (0 == sounds[i].link) {
+            // load data from WAD file
+            sounds[i].driver_data = snd_getsfx(sounds[i].name, &snd_state.lengths[i]);
+        }
+        else {
+            // previously loaded already?
+            const int snd_index = sounds[i].link - sounds;
+            assert((snd_index >= 0) && (snd_index < NUMSFX));
+            sounds[i].driver_data = sounds[i].link->driver_data;
+            snd_state.lengths[i] = snd_state.lengths[snd_index];
+        }
+    }
 }
 
 static snddevice_t sound_sokol_devices[] = {

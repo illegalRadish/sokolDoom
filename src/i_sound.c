@@ -447,6 +447,7 @@ boolean I_MusicIsPlaying(void)
 
 void I_BindSoundVariables(void)
 {
+/* SOKOL CHANGE
 #ifdef ORIGCODE
     extern int use_libsamplerate;
     extern float libsamplerate_scale;
@@ -488,5 +489,6 @@ void I_BindSoundVariables(void)
     }
 #endif
 #endif
+*/
 }
 
