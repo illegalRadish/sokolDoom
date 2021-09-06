@@ -19,7 +19,9 @@
 #include <assert.h>
 #include "shaders.glsl.h"
 
-#include <stdio.h>
+#include <stdio.h> // printf
+
+#define SAMPLECOUNT (512)
 
 // in m_menu.c
 extern boolean menuactive;
@@ -92,6 +94,9 @@ void init(void) {
     });
     saudio_setup(&(saudio_desc){
         .sample_rate = 11025,
+        .buffer_frames = SAMPLECOUNT,
+        .packet_frames = 64,
+        .num_packets = 8,
         .num_channels = 2,
     });
     printf(">>> sokol_audio sample rate: %d, num channels: %d", saudio_sample_rate(), saudio_channels());
@@ -611,25 +616,26 @@ wad_file_class_t memio_wad_file = {
 #include "w_wad.h"
 #include "sounds.h"
 
-#define SAMPLECOUNT (512)
+// same as default sokol-audio buffer size in frames
 #define NUM_CHANNELS (8)
+#define MIXBUFFERSIZE (SAMPLECOUNT * 2)
 
 typedef struct {
-    uint8_t* start_ptr;
+    uint8_t* cur_ptr;
     uint8_t* end_ptr;
     int sfxid;
     int handle;
-    int* leftvol_lookup;
-    int* rightvol_lookup;
+    int leftvol;
+    int rightvol;
 } snd_channel_t;
 
 static struct {
     bool use_sfx_prefix;
     uint16_t cur_sfx_handle;
     snd_channel_t channels[NUM_CHANNELS];
-    // padded sound data lengths
+    // sound data lengths
     int lengths[NUMSFX];
-    int vol_lookup[128 * 256];
+    float mixbuffer[MIXBUFFERSIZE];
 } snd_state;
 
 // helper function to load sound data from WAD lump
@@ -645,28 +651,13 @@ static void* snd_getsfx(const char* sfxname, int* len) {
         sfxlump = W_GetNumForName(name);
     }
     const int size = W_LumpLength(sfxlump);
+    assert(size > 8);
 
     printf("...loading %s (lump: %d, %d bytes)\n", sfxname, sfxlump, size);
 
     uint8_t* sfx = W_CacheLumpNum(sfxlump, PU_STATIC);
-
-    // pad the sound effect to the mixing buffer size
-    int paddedsize = ((size - 8 + (SAMPLECOUNT-1)) / SAMPLECOUNT) * SAMPLECOUNT;
-
-    // allocate from zone memory
-    uint8_t* paddedsfx = Z_Malloc(paddedsize+8, PU_STATIC, 0);
-
-    // copy and pad
-    memcpy(paddedsfx, sfx, size);
-    for (int i = size; i < (paddedsize+8); i++) {
-        paddedsfx[i] = 128;
-    }
-
-    // remove the cached lump
-    Z_Free(sfx);
-
-    *len = paddedsize;
-    return (paddedsfx+8);
+    *len = size - 8;
+    return sfx + 8;
 }
 
 // This function adds a sound to the list of currently active sounds,
@@ -688,11 +679,9 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
         (sfxid == sfx_pistol))
     {
         for (int i = 0; i < NUM_CHANNELS; i++) {
-            // active and using the same sfx?
-            if (snd_state.channels[i] && (snd_state.channelids[i] == sfxid)) {
+            if (snd_state.channels[i].sfxid == sfxid) {
                 // reset
-                snd_state.channels[i] = 0;
-                // FIXME: also reset other per-channel state
+                snd_state.channels[i] = (snd_channel_t){0};
                 // we are sure that if, there will be only one
                 break;
             }
@@ -705,8 +694,8 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
         snd_state.cur_sfx_handle = 1;
     }
     snd_state.channels[slot].handle = (int)snd_state.cur_sfx_handle;
-    snd_state.channels[slot].start_ptr = S_sfx[sfxid].driver_data;
-    snd_state.channels[slot].end_ptr = snd_state.channels[slot].start_ptr + snd_state.lengths[sfxid];
+    snd_state.channels[slot].cur_ptr = S_sfx[sfxid].driver_data;
+    snd_state.channels[slot].end_ptr = snd_state.channels[slot].cur_ptr + snd_state.lengths[sfxid];
 
     // Separation, that is, orientation/stereo. range is: 1 - 256
     separation += 1;
@@ -721,30 +710,19 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
     int rightvol = volume - ((volume * right_sep * right_sep) >> 16);
     assert((rightvol >= 0) && (rightvol <= 127));
 
-    // Get the proper lookup table piece
-    //  for this volume level???
-    snd_state.channels[slot].leftvol_lookup = &snd_state.vol_lookup[leftvol * 256];
-    snd_state.channels[slot].rightvol_lookup = &snd_state.vol_lookup[rightvol * 256];
+    snd_state.channels[slot].leftvol = leftvol;
+    snd_state.channels[slot].rightvol = rightvol;
 
     return snd_state.channels[slot].handle;
 }
 
 static boolean snd_Init(boolean use_sfx_prefix) {
-    printf(">>> snd_Init(use_sfx_prefix:%s)\n", use_sfx_prefix ? "true":"false");
     snd_state.use_sfx_prefix = use_sfx_prefix;
     assert(snd_state.use_sfx_prefix);
-
-    // initialize volume lookup tables which also turn the unsigned samples into signed
-    for (int i = 0; i < 128; i++) {
-        for (int j = 0; j < 256; j++) {
-            snd_state.vol_lookup[i*256 + j] = (i*(j-128)*256)/127;
-        }
-    }
     return true;
 }
 
 static void snd_Shutdown(void) {
-    printf(">>> snd_Shutdown()\n");
     // nothing to do here
 }
 
@@ -759,8 +737,59 @@ static int snd_GetSfxLumpNum(sfxinfo_t* sfx) {
     return W_GetNumForName(namebuf);
 }
 
+static float snd_clampf(float val, float maxval, float minval) {
+    if (val > maxval) {
+        return maxval;
+    }
+    else if (val < minval) {
+        return minval;
+    }
+    else {
+        return val;
+    }
+}
+
 static void snd_Update(void) {
-    // FIXME
+
+    const int num_frames = saudio_expect();
+    if (num_frames == 0) {
+        return;
+    }
+    assert(num_frames <= SAMPLECOUNT);
+
+    // left and right pointers into mixbuffer
+    float* leftout = &snd_state.mixbuffer[0];
+    float* rightout = &snd_state.mixbuffer[1];
+
+    // mix sound into the mixing buffer
+    for (int frame_index = 0; frame_index < num_frames; frame_index++) {
+        // left/right sample value
+        int dl = 0.0f;
+        int dr = 0.0f;
+        for (int slot = 0; slot < NUM_CHANNELS; slot++) {
+            snd_channel_t* chn = &snd_state.channels[slot];
+            if (chn->cur_ptr) {
+                int sample = ((int)(*chn->cur_ptr++)) - 128;
+                dl += sample * chn->leftvol;
+                dr += sample * chn->rightvol;
+                // sound effect done?
+                if (chn->cur_ptr >= chn->end_ptr) {
+                    *chn = (snd_channel_t){0};
+                }
+            }
+        }
+
+        // clamp sample value to valid range
+        const float dlf = ((float)dl) / 16383.0f;
+        const float drf = ((float)dr) / 16383.0f;
+        *leftout = snd_clampf(dlf, 1.0f, -1.0f);
+        *rightout = snd_clampf(drf, 1.0f, -1.0f);
+        leftout += 2;
+        rightout += 2;
+    }
+
+    // push result to sokol_audio
+    saudio_push(snd_state.mixbuffer, num_frames);
 }
 
 static void snd_UpdateSoundParams(int handle, int vol, int sep) {
@@ -785,22 +814,18 @@ static int snd_StartSound(sfxinfo_t* sfxinfo, int channel, int vol, int sep) {
     int sfxid = sfxinfo - S_sfx;
     assert((sfxid >= 0) && (sfxid < NUMSFX));
     int handle = snd_addsfx(sfxid, channel, vol, sep);
-    printf(">>> snd_StartSound(sfxinfo: %p, channel:%d, vol:%d, sep:%d) => %d\n", sfxinfo, channel, vol, sep, handle);
     return handle;
 }
 
 static void snd_StopSound(int handle) {
-    printf(">>> snd_StopSound(handle:%d)\n", handle);
     for (int i = 0; i < NUM_CHANNELS; i++) {
         if (snd_state.channels[i].handle == handle) {
             snd_state.channels[i] = (snd_channel_t){0};
         }
     }
-    // FIXME
 }
 
 static boolean snd_SoundIsPlaying(int handle) {
-//    printf(">>> snd_SoundIsPlaying(handle:%d)\n", handle);
     for (int i = 0; i < NUM_CHANNELS; i++) {
         if (snd_state.channels[i].handle == handle) {
             return true;
@@ -810,7 +835,6 @@ static boolean snd_SoundIsPlaying(int handle) {
 }
 
 static void snd_CacheSounds(sfxinfo_t* sounds, int num_sounds) {
-    printf(">>> snd_CacheSounds(sounds:%p, num_sounds:%d)\n", sounds, num_sounds);
     for (int i = 0; i < num_sounds; i++) {
         if (0 == sounds[i].link) {
             // load data from WAD file
