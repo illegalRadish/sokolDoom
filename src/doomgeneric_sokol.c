@@ -95,7 +95,7 @@ static struct {
         int volume;
         mus_t* mus;
         bool reset;
-        int left_over;
+        int leftover;
     } music;
 } app;
 
@@ -190,7 +190,7 @@ void init(void) {
 
     // initialize sound font
     app.music.sound_font = tsf_load_memory(soundfont, sizeof(soundfont));
-    tsf_set_output(app.music.sound_font, TSF_STEREO_INTERLEAVED
+    tsf_set_output(app.music.sound_font, TSF_STEREO_INTERLEAVED, saudio_sample_rate(), 0);
 }
 
 static void begin_init_screen(void) {
@@ -210,8 +210,8 @@ static void end_init_screen(void) {
 
 static void draw_greeting_message(void) {
     sdtx_color3f(0.75f, 0.75f, 0.75f);
-    sdtx_puts("*** DOOM (shareware, no sound) ***\n\n");
-    sdtx_puts("Ported to the sokol headers.\n\n");
+    sdtx_puts("*** DOOM (shareware) ***\n\n");
+    sdtx_puts("Ported to the Sokol headers.\n\n");
     sdtx_puts("Project URL: https://github.com/floooh/doom-sokol\n\n");
     sdtx_puts("Controls:\n");
     sdtx_puts("=========\n\n");
@@ -910,12 +910,14 @@ static void mus_mix(int num_frames) {
     if (!mus) {
         return;
     }
+    tsf* sf = app.music.sound_font;
+    assert(sf);
     if (app.music.reset) {
-        tsf_reset(app.music.sound_font);
+        tsf_reset(sf);
         app.music.reset = false;
     }
-    tsf_set_volume(app.music.sound_font, app.music.volume);
-    int leftover_from_previous = app.music.left_over;
+    tsf_set_volume(sf, app.music.volume);
+    int leftover_from_previous = app.music.leftover;
     int remaining = num_frames;
     float* output = app.sound.mixbuffer;
     int leftover = 0;
@@ -925,13 +927,96 @@ static void mus_mix(int num_frames) {
             leftover = count - remaining;
             count = remaining;
         }
-        tsf_render_float(app.music.sound_font, output, count, 1);
+        tsf_render_float(sf, output, count, 1);
         remaining -= count;
         output += count * 2;
     }
+    if (leftover > 0) {
+        app.music.leftover = leftover;
+        return;
+    }
 
-    
-
+    while (remaining) {
+        mus_event_t ev;
+        mus_next_event(app.music.mus, &ev);
+        switch (ev.cmd) {
+            case MUS_CMD_RELEASE_NOTE:
+                tsf_channel_note_off(sf, ev.channel, ev.data.release_note.note);
+                break;
+            case MUS_CMD_PLAY_NOTE:
+                tsf_channel_note_on(sf, ev.channel, ev.data.play_note.note, ev.data.play_note.volume / 127.0f);
+                break;
+            case MUS_CMD_PITCH_BEND: {
+                int pitch_bend = (ev.data.pitch_bend.bend_amount - 128) * 64 + 8192;
+                tsf_channel_set_pitchwheel(sf, ev.channel, pitch_bend);
+            } break;
+            case MUS_CMD_SYSTEM_EVENT:
+                switch (ev.data.system_event.event) {
+                    case MUS_SYSTEM_EVENT_ALL_SOUNDS_OFF:
+                        tsf_channel_sounds_off_all(sf, ev.channel);
+                        break;
+                    case MUS_SYSTEM_EVENT_ALL_NOTES_OFF:
+                        tsf_channel_note_off_all(sf, ev.channel);
+                        break;
+                    case MUS_SYSTEM_EVENT_MONO:
+                    case MUS_SYSTEM_EVENT_POLY:
+                        // not supported
+                        break;
+                    case MUS_SYSTEM_EVENT_RESET_ALL_CONTROLLERS:
+                        tsf_channel_midi_control(sf, ev.channel, 121, 0);
+                        break;
+                }
+                break;
+            case MUS_CMD_CONTROLLER: {
+                int value = ev.data.controller.value;
+                switch (ev.data.controller.controller) {
+                    case MUS_CONTROLLER_CHANGE_INSTRUMENT:
+                        if (ev.channel == 15) {
+                            tsf_channel_set_presetnumber(sf, 15, 0, 1);
+                        }
+                        else {
+                            tsf_channel_set_presetnumber(sf, ev.channel, value, 0);
+                        }
+                        break;
+                    case MUS_CONTROLLER_BANK_SELECT:
+                        tsf_channel_set_bank(sf, ev.channel, value);
+                        break;
+                    case MUS_CONTROLLER_VOLUME:
+                        tsf_channel_midi_control(sf, ev.channel, 7, value);
+                        break;
+                    case MUS_CONTROLLER_PAN:
+                        tsf_channel_midi_control(sf, ev.channel, 10, value);
+                        break;
+                    case MUS_CONTROLLER_EXPRESSION:
+                        tsf_channel_midi_control(sf, ev.channel, 11, value);
+                        break;
+                    case MUS_CONTROLLER_MODULATION:
+                    case MUS_CONTROLLER_REVERB_DEPTH:
+                    case MUS_CONTROLLER_CHORUS_DEPTH:
+                    case MUS_CONTROLLER_SUSTAIN_PEDAL:
+                    case MUS_CONTROLLER_SOFT_PEDAL:
+                        break;
+                }
+            } break;
+            case MUS_CMD_END_OF_MEASURE:
+                // not used
+                break;
+            case MUS_CMD_FINISH:
+                mus_restart(mus);
+                break;
+            case MUS_CMD_RENDER_SAMPLES: {
+                int count = ev.data.render_samples.samples_count;
+                if (count > remaining) {
+                    leftover = count - remaining;
+                    count = remaining;
+                }
+                tsf_render_float(sf, output, count, 1);
+                remaining -= count;
+                output += count * 2;
+            } break;
+        }
+    }
+    app.music.leftover = leftover;
 }
 
 static boolean mus_Init(void) {
@@ -987,7 +1072,7 @@ static void mus_PlaySong(void* handle, boolean looping) {
     assert(app.music.cur_song_len == *(((uint16_t*)app.music.cur_song_data)+2 ) + *(((uint16_t*)app.music.cur_song_data)+3));
     app.music.mus = mus_create(app.music.cur_song_data, app.music.cur_song_len, 0);
     assert(app.music.mus);
-    app.music.left_over = 0;
+    app.music.leftover = 0;
     app.music.reset = true;
 }
 
@@ -996,7 +1081,7 @@ static void mus_StopSong(void) {
     assert(app.music.mus);
     mus_destroy(app.music.mus);
     app.music.mus = 0;
-    app.music.left_over = 0;
+    app.music.leftover = 0;
     app.music.reset = true;
 }
 

@@ -120,5 +120,6 @@ if (FIPS_CLANG)
         -Wno-unused-but-set-parameter
         -Wno-unused-but-set-variable
         -Wno-absolute-value
+        -Wno-null-pointer-subtraction
     )
 endif()
