@@ -52,7 +52,8 @@ typedef struct
 void D_RegisterLoopCallbacks(loop_interface_t *i);
 
 // Create any new ticcmds and broadcast to other players.
-void NetUpdate (void);
+// SOKOL CHANGE
+// void NetUpdate (void);
 
 // Broadcasts special packets to other players
 //  to notify of game exit

@@ -107,7 +107,7 @@ fips_begin_app(doom windowed)
         doomgeneric.c
     )
     fips_deps(sokol)
-    sokol_shader(shaders.glsl ${slang})
+    sokol_shader(sokol_shaders.glsl ${slang})
     fipsutil_copy(doom-assets.yml)
 fips_end_app()
 

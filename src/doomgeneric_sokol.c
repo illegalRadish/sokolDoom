@@ -17,7 +17,7 @@
 #include "doomgeneric.h"
 #include "doomkeys.h"
 #include <assert.h>
-#include "shaders.glsl.h"
+#include "sokol_shaders.glsl.h"
 
 #include <stdio.h> // printf
 

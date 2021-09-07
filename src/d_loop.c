@@ -81,8 +81,8 @@ boolean singletics = false;
 static int localplayer;
 
 // Used for original sync code.
-
-static int      skiptics = 0;
+// SOKOL CHANGE
+//static int      skiptics = 0;
 
 // Reduce the bandwidth needed by sampling game input less and transmitting
 // less.  If ticdup is 2, sample half normal, 3 = one third normal, etc.
@@ -114,8 +114,9 @@ static boolean local_playeringame[NET_MAXPLAYERS];
 static int player_class;
 
 
+// SOKOL CHANGE
+/*
 // 35 fps clock adjusted by offsetms milliseconds
-
 static int GetAdjustedTime(void)
 {
     int time_ms;
@@ -132,6 +133,7 @@ static int GetAdjustedTime(void)
 
     return (time_ms * TICRATE) / 1000;
 }
+*/
 
 static boolean BuildNewTic(void)
 {
@@ -193,6 +195,7 @@ static boolean BuildNewTic(void)
     return true;
 }
 
+/* SOKOL CHANGE
 //
 // NetUpdate
 // Builds ticcmds for console player,
@@ -248,6 +251,7 @@ void NetUpdate (void)
         }
     }
 }
+*/
 
 static void D_Disconnected(void)
 {
@@ -304,7 +308,8 @@ void D_ReceiveTic(ticcmd_t *ticcmds, boolean *players_mask)
 
 void D_StartGameLoop(void)
 {
-    lasttime = GetAdjustedTime() / ticdup;
+    // SOKOL CHANGE
+    //lasttime = GetAdjustedTime() / ticdup;
 }
 
 #if ORIGCODE
@@ -584,6 +589,8 @@ static int GetLowTic(void)
     return lowtic;
 }
 
+// SOKOL CHANGE
+/*
 static int frameon;
 static int frameskip[4];
 static int oldnettics;
@@ -636,6 +643,7 @@ static void OldNetSync(void)
         }
     }
 }
+*/
 
 // Returns true if there are players in the game:
 
@@ -754,10 +762,12 @@ void TryRunTics (void)
         if (counts < 1)
             counts = 1;
 
+        /* SOKOL CHANGE
         if (net_client_connected)
         {
             OldNetSync();
         }
+        */
     }
 
     if (counts < 1)
@@ -766,7 +776,8 @@ void TryRunTics (void)
     // wait for new tics if needed
     while (!PlayersInGame() || lowtic < gametic/ticdup + counts)
     {
-        NetUpdate ();
+        // SOKOL CHANGE
+        //NetUpdate ();
 
         lowtic = GetLowTic();
 
@@ -816,7 +827,8 @@ void TryRunTics (void)
                 TicdupSquash(set);
         }
 
-        NetUpdate ();	// check for new console commands
+        // SOKOL CHANGE
+        //NetUpdate ();	// check for new console commands
     }
 }
 
