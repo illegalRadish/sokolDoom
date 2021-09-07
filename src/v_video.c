@@ -703,6 +703,7 @@ void WritePCXfile(char *filename, byte *data,
     Z_Free (pcx);
 }
 
+/* SOKOL CHANGE
 #ifdef HAVE_LIBPNG
 //
 // WritePNGfile
@@ -783,6 +784,7 @@ void WritePNGfile(char *filename, byte *data,
     fclose(handle);
 }
 #endif
+*/
 
 //
 // V_ScreenShot
@@ -790,6 +792,7 @@ void WritePNGfile(char *filename, byte *data,
 
 void V_ScreenShot(char *format)
 {
+/* SOKOL CHANGE
     int i;
     char lbmname[16]; // haleyjd 20110213: BUG FIX - 12 is too small!
     char *ext;
@@ -838,6 +841,7 @@ void V_ScreenShot(char *format)
                  SCREENWIDTH, SCREENHEIGHT,
                  W_CacheLumpName (DEH_String("PLAYPAL"), PU_CACHE));
     }
+*/
 }
 
 #define MOUSE_SPEED_BOX_WIDTH  120

@@ -342,6 +342,7 @@ void StatCopy(wbstartstruct_t *stats)
 
 void StatDump(void)
 {
+/* SOKOL CHANGE
 #if ORIGCODE
     FILE *dumpfile;
     int i;
@@ -388,5 +389,6 @@ void StatDump(void)
         }
     }
 #endif
+*/
 }
 

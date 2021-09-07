@@ -1547,6 +1547,7 @@ void G_LoadGame (char* name)
 
 void G_DoLoadGame (void) 
 {
+/* SOKOL CHANGE
     int savedleveltime;
 	 
     gameaction = ga_nothing; 
@@ -1588,7 +1589,8 @@ void G_DoLoadGame (void)
     	R_ExecuteSetViewSize ();
     
     // draw the pattern into the back screen
-    R_FillBackScreen (); 
+    R_FillBackScreen ();
+*/
 } 
  
 
@@ -1608,7 +1610,8 @@ G_SaveGame
 }
 
 void G_DoSaveGame (void) 
-{ 
+{
+/* SOKOL CHANGE
     char *savegame_file;
     char *temp_savegame_file;
     char *recovery_savegame_file;
@@ -1681,7 +1684,8 @@ void G_DoSaveGame (void)
     players[consoleplayer].message = DEH_String(GGSAVED);
 
     // draw the pattern into the back screen
-    R_FillBackScreen ();	
+    R_FillBackScreen ();
+*/
 } 
  
 

@@ -467,6 +467,7 @@ void W_ReleaseLumpName(char *name)
     W_ReleaseLumpNum(W_GetNumForName(name));
 }
 
+/* SOKOL CHANGE
 #if 0
 
 //
@@ -533,6 +534,7 @@ void W_Profile (void)
 
 
 #endif
+*/
 
 // Generate a hash table for fast lookups
 

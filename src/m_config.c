@@ -1608,6 +1608,8 @@ static const int scantokey[128] =
 
 static void SaveDefaultCollection(default_collection_t *collection)
 {
+// SOKOL CHANGE
+/*
 #if ORIGCODE
     default_t *defaults;
     int i, v;
@@ -1709,6 +1711,7 @@ static void SaveDefaultCollection(default_collection_t *collection)
 
     fclose (f);
 #endif
+*/
 }
 
 // Parses integer values in the configuration file
@@ -1770,6 +1773,7 @@ static void SetVariable(default_t *def, char *value)
 
 static void LoadDefaultCollection(default_collection_t *collection)
 {
+/* SOKOL CHANGE
 #if ORIGCODE
     FILE *f;
     default_t *def;
@@ -1829,6 +1833,7 @@ static void LoadDefaultCollection(default_collection_t *collection)
 
     fclose (f);
 #endif
+*/
 }
 
 // Set the default filenames to use for configuration files.
