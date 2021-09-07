@@ -14,14 +14,15 @@
 #include "m_argv.h"
 #include "d_event.h"
 #include "i_video.h"
+#include "i_sound.h"
+#include "w_wad.h"
+#include "sounds.h"
 #include "doomgeneric.h"
 #include "doomkeys.h"
 #include <assert.h>
 #include "sokol_shaders.glsl.h"
 
 #include <stdio.h> // printf
-
-#define SAMPLECOUNT (512)
 
 // in m_menu.c
 extern boolean menuactive;
@@ -32,6 +33,9 @@ void D_DoomFrame(void);
 void dg_Create();
 
 #define KEY_QUEUE_SIZE (32)
+#define MAXSAMPLECOUNT (2048)
+#define NUM_CHANNELS (8)
+#define MIXBUFFERSIZE (MAXSAMPLECOUNT * 2)
 
 typedef enum {
     APP_STATE_LOADING,
@@ -46,6 +50,15 @@ typedef struct {
     bool pressed;
 } key_state_t;
 
+typedef struct {
+    uint8_t* cur_ptr;
+    uint8_t* end_ptr;
+    int sfxid;
+    int handle;
+    int leftvol;
+    int rightvol;
+} snd_channel_t;
+
 static struct {
     app_state_t state;
     sg_buffer vbuf;
@@ -56,6 +69,18 @@ static struct {
     uint32_t key_read_index;
     uint32_t mouse_button_state;
     uint32_t delayed_mouse_button_up;
+    struct {
+        bool use_sfx_prefix;
+        uint16_t cur_sfx_handle;
+        snd_channel_t channels[NUM_CHANNELS];
+        uint32_t resample_period;
+        uint32_t resample_interval;
+        uint32_t resample_accum;
+        float cur_left_sample;
+        float cur_right_sample;
+        int lengths[NUMSFX];        // length in bytes/samples of sound effects
+        float mixbuffer[MIXBUFFERSIZE];
+    } snd;
 } app;
 
 #define MAX_WAD_SIZE (6 * 1024 * 1024)
@@ -93,10 +118,9 @@ void init(void) {
         .num_lanes = 1,
     });
     saudio_setup(&(saudio_desc){
-        .sample_rate = 11025,
-        .buffer_frames = SAMPLECOUNT,
-        .packet_frames = 64,
-        .num_packets = 8,
+        .buffer_frames = MAXSAMPLECOUNT,
+        .packet_frames = 128,
+        .num_packets = MAXSAMPLECOUNT / 128,
         .num_channels = 2,
     });
     printf(">>> sokol_audio sample rate: %d, num channels: %d", saudio_sample_rate(), saudio_channels());
@@ -257,6 +281,16 @@ static void draw_game_frame(void) {
     sg_commit();
 }
 
+static void snd_mix(int);
+static void update_game_audio() {
+    const int num_sample_frames = saudio_expect();
+    if (num_sample_frames > 0) {
+        assert(num_sample_frames <= MAXSAMPLECOUNT);
+        snd_mix(num_sample_frames);
+        saudio_push(app.snd.mixbuffer, num_sample_frames);
+    }
+}
+
 void frame(void) {
     sfetch_dowork();
     switch (app.state) {
@@ -288,6 +322,7 @@ void frame(void) {
                     });
                 }
             }
+            update_game_audio();
             draw_game_frame();
             break;
 
@@ -612,35 +647,8 @@ wad_file_class_t memio_wad_file = {
 
 // see https://github.com/mattiasgustavsson/doom-crt/blob/main/linuxdoom-1.10/i_sound.c
 
-#include "i_sound.h"
-#include "w_wad.h"
-#include "sounds.h"
-
-// same as default sokol-audio buffer size in frames
-#define NUM_CHANNELS (8)
-#define MIXBUFFERSIZE (SAMPLECOUNT * 2)
-
-typedef struct {
-    uint8_t* cur_ptr;
-    uint8_t* end_ptr;
-    int sfxid;
-    int handle;
-    int leftvol;
-    int rightvol;
-} snd_channel_t;
-
-static struct {
-    bool use_sfx_prefix;
-    uint16_t cur_sfx_handle;
-    snd_channel_t channels[NUM_CHANNELS];
-    // sound data lengths
-    int lengths[NUMSFX];
-    float mixbuffer[MIXBUFFERSIZE];
-} snd_state;
-
 // helper function to load sound data from WAD lump
 static void* snd_getsfx(const char* sfxname, int* len) {
-
     char name[20];
     snprintf(name, sizeof(name), "ds%s", sfxname);
     int sfxlump;
@@ -652,8 +660,6 @@ static void* snd_getsfx(const char* sfxname, int* len) {
     }
     const int size = W_LumpLength(sfxlump);
     assert(size > 8);
-
-    printf("...loading %s (lump: %d, %d bytes)\n", sfxname, sfxlump, size);
 
     uint8_t* sfx = W_CacheLumpNum(sfxlump, PU_STATIC);
     *len = size - 8;
@@ -679,23 +685,23 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
         (sfxid == sfx_pistol))
     {
         for (int i = 0; i < NUM_CHANNELS; i++) {
-            if (snd_state.channels[i].sfxid == sfxid) {
+            if (app.snd.channels[i].sfxid == sfxid) {
                 // reset
-                snd_state.channels[i] = (snd_channel_t){0};
+                app.snd.channels[i] = (snd_channel_t){0};
                 // we are sure that if, there will be only one
                 break;
             }
         }
     }
     */
-    snd_state.channels[slot].sfxid = sfxid;
-    snd_state.cur_sfx_handle += 1;
-    if (snd_state.cur_sfx_handle == 0) {
-        snd_state.cur_sfx_handle = 1;
+    app.snd.channels[slot].sfxid = sfxid;
+    app.snd.cur_sfx_handle += 1;
+    if (app.snd.cur_sfx_handle == 0) {
+        app.snd.cur_sfx_handle = 1;
     }
-    snd_state.channels[slot].handle = (int)snd_state.cur_sfx_handle;
-    snd_state.channels[slot].cur_ptr = S_sfx[sfxid].driver_data;
-    snd_state.channels[slot].end_ptr = snd_state.channels[slot].cur_ptr + snd_state.lengths[sfxid];
+    app.snd.channels[slot].handle = (int)app.snd.cur_sfx_handle;
+    app.snd.channels[slot].cur_ptr = S_sfx[sfxid].driver_data;
+    app.snd.channels[slot].end_ptr = app.snd.channels[slot].cur_ptr + app.snd.lengths[sfxid];
 
     // Separation, that is, orientation/stereo. range is: 1 - 256
     separation += 1;
@@ -710,31 +716,10 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
     int rightvol = volume - ((volume * right_sep * right_sep) >> 16);
     assert((rightvol >= 0) && (rightvol <= 127));
 
-    snd_state.channels[slot].leftvol = leftvol;
-    snd_state.channels[slot].rightvol = rightvol;
+    app.snd.channels[slot].leftvol = leftvol;
+    app.snd.channels[slot].rightvol = rightvol;
 
-    return snd_state.channels[slot].handle;
-}
-
-static boolean snd_Init(boolean use_sfx_prefix) {
-    snd_state.use_sfx_prefix = use_sfx_prefix;
-    assert(snd_state.use_sfx_prefix);
-    return true;
-}
-
-static void snd_Shutdown(void) {
-    // nothing to do here
-}
-
-static int snd_GetSfxLumpNum(sfxinfo_t* sfx) {
-    char namebuf[20];
-    if (snd_state.use_sfx_prefix) {
-        M_snprintf(namebuf, sizeof(namebuf), "dp%s", sfx->name);
-    }
-    else {
-        M_StringCopy(namebuf, sfx->name, sizeof(namebuf));
-    }
-    return W_GetNumForName(namebuf);
+    return app.snd.channels[slot].handle;
 }
 
 static float snd_clampf(float val, float maxval, float minval) {
@@ -749,47 +734,66 @@ static float snd_clampf(float val, float maxval, float minval) {
     }
 }
 
-static void snd_Update(void) {
-
-    const int num_frames = saudio_expect();
-    if (num_frames == 0) {
-        return;
-    }
-    assert(num_frames <= SAMPLECOUNT);
-
-    // left and right pointers into mixbuffer
-    float* leftout = &snd_state.mixbuffer[0];
-    float* rightout = &snd_state.mixbuffer[1];
-
+static void snd_mix(int num_sample_frames) {
     // mix sound into the mixing buffer
-    for (int frame_index = 0; frame_index < num_frames; frame_index++) {
-        // left/right sample value
-        int dl = 0.0f;
-        int dr = 0.0f;
-        for (int slot = 0; slot < NUM_CHANNELS; slot++) {
-            snd_channel_t* chn = &snd_state.channels[slot];
-            if (chn->cur_ptr) {
-                int sample = ((int)(*chn->cur_ptr++)) - 128;
-                dl += sample * chn->leftvol;
-                dr += sample * chn->rightvol;
-                // sound effect done?
-                if (chn->cur_ptr >= chn->end_ptr) {
-                    *chn = (snd_channel_t){0};
+    int frame_index = 0;
+    while (frame_index < num_sample_frames) {
+        // compute new left/right sample?
+        if (app.snd.resample_accum >= app.snd.resample_period) {
+            app.snd.resample_accum -= app.snd.resample_period;
+            int dl = 0.0f;
+            int dr = 0.0f;
+            for (int slot = 0; slot < NUM_CHANNELS; slot++) {
+                snd_channel_t* chn = &app.snd.channels[slot];
+                if (chn->cur_ptr) {
+                    int sample = ((int)(*chn->cur_ptr++)) - 128;
+                    dl += sample * chn->leftvol;
+                    dr += sample * chn->rightvol;
+                    // sound effect done?
+                    if (chn->cur_ptr >= chn->end_ptr) {
+                        *chn = (snd_channel_t){0};
+                    }
                 }
             }
+            app.snd.cur_left_sample = snd_clampf(((float)dl) / 16383.0f, 1.0f, -1.0f);
+            app.snd.cur_right_sample = snd_clampf(((float)dr) / 16383.0f, 1.0f, -1.0f);
         }
+        app.snd.resample_accum += app.snd.resample_interval;
 
-        // clamp sample value to valid range
-        const float dlf = ((float)dl) / 16383.0f;
-        const float drf = ((float)dr) / 16383.0f;
-        *leftout = snd_clampf(dlf, 1.0f, -1.0f);
-        *rightout = snd_clampf(drf, 1.0f, -1.0f);
-        leftout += 2;
-        rightout += 2;
+        // write left and right sample values to mix buffer
+        app.snd.mixbuffer[frame_index*2]     = app.snd.cur_left_sample;
+        app.snd.mixbuffer[frame_index*2 + 1] = app.snd.cur_right_sample;
+        frame_index++;
     }
+}
 
-    // push result to sokol_audio
-    saudio_push(snd_state.mixbuffer, num_frames);
+static boolean snd_Init(boolean use_sfx_prefix) {
+    assert(use_sfx_prefix);
+    app.snd.use_sfx_prefix = use_sfx_prefix;
+    assert(app.snd.use_sfx_prefix);
+    app.snd.resample_period = app.snd.resample_accum = saudio_sample_rate();
+    app.snd.resample_interval = 11025;    // sound effect are in 11025Hz
+    return true;
+}
+
+static void snd_Shutdown(void) {
+    // nothing to do here
+}
+
+static int snd_GetSfxLumpNum(sfxinfo_t* sfx) {
+    char namebuf[20];
+    if (app.snd.use_sfx_prefix) {
+        M_snprintf(namebuf, sizeof(namebuf), "dp%s", sfx->name);
+    }
+    else {
+        M_StringCopy(namebuf, sfx->name, sizeof(namebuf));
+    }
+    return W_GetNumForName(namebuf);
+}
+
+static void snd_Update(void) {
+    // sound mixing and pushing to sokol-audio happens in the frame()
+    // callback at display refresh rate
 }
 
 static void snd_UpdateSoundParams(int handle, int vol, int sep) {
@@ -819,15 +823,15 @@ static int snd_StartSound(sfxinfo_t* sfxinfo, int channel, int vol, int sep) {
 
 static void snd_StopSound(int handle) {
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        if (snd_state.channels[i].handle == handle) {
-            snd_state.channels[i] = (snd_channel_t){0};
+        if (app.snd.channels[i].handle == handle) {
+            app.snd.channels[i] = (snd_channel_t){0};
         }
     }
 }
 
 static boolean snd_SoundIsPlaying(int handle) {
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        if (snd_state.channels[i].handle == handle) {
+        if (app.snd.channels[i].handle == handle) {
             return true;
         }
     }
@@ -838,14 +842,14 @@ static void snd_CacheSounds(sfxinfo_t* sounds, int num_sounds) {
     for (int i = 0; i < num_sounds; i++) {
         if (0 == sounds[i].link) {
             // load data from WAD file
-            sounds[i].driver_data = snd_getsfx(sounds[i].name, &snd_state.lengths[i]);
+            sounds[i].driver_data = snd_getsfx(sounds[i].name, &app.snd.lengths[i]);
         }
         else {
             // previously loaded already?
             const int snd_index = sounds[i].link - sounds;
             assert((snd_index >= 0) && (snd_index < NUMSFX));
             sounds[i].driver_data = sounds[i].link->driver_data;
-            snd_state.lengths[i] = snd_state.lengths[snd_index];
+            app.snd.lengths[i] = app.snd.lengths[snd_index];
         }
     }
 }
