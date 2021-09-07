@@ -22,6 +22,13 @@
 #include <assert.h>
 #include "sokol_shaders.glsl.h"
 
+#define MUS_IMPLEMENTATION
+#include "mus.h"
+#define TSF_IMPLEMENTATION
+#include "tsf.h"
+
+#include "soundfont.h"
+
 #include <stdio.h> // printf
 
 // in m_menu.c
@@ -80,7 +87,16 @@ static struct {
         float cur_right_sample;
         int lengths[NUMSFX];        // length in bytes/samples of sound effects
         float mixbuffer[MIXBUFFERSIZE];
-    } snd;
+    } sound;
+    struct {
+        tsf* sound_font;
+        void* cur_song_data;
+        int cur_song_len;
+        int volume;
+        mus_t* mus;
+        bool reset;
+        int left_over;
+    } music;
 } app;
 
 #define MAX_WAD_SIZE (6 * 1024 * 1024)
@@ -171,6 +187,10 @@ void init(void) {
         .buffer_size = sizeof(wad_buffer)
     });
     app.state = APP_STATE_LOADING;
+
+    // initialize sound font
+    app.music.sound_font = tsf_load_memory(soundfont, sizeof(soundfont));
+    tsf_set_output(app.music.sound_font, TSF_STEREO_INTERLEAVED
 }
 
 static void begin_init_screen(void) {
@@ -282,12 +302,14 @@ static void draw_game_frame(void) {
 }
 
 static void snd_mix(int);
+static void mus_mix(int);
 static void update_game_audio() {
-    const int num_sample_frames = saudio_expect();
-    if (num_sample_frames > 0) {
-        assert(num_sample_frames <= MAXSAMPLECOUNT);
-        snd_mix(num_sample_frames);
-        saudio_push(app.snd.mixbuffer, num_sample_frames);
+    const int num_frames = saudio_expect();
+    if (num_frames > 0) {
+        assert(num_frames <= MAXSAMPLECOUNT);
+        snd_mix(num_frames);
+        mus_mix(num_frames);
+        saudio_push(app.sound.mixbuffer, num_frames);
     }
 }
 
@@ -333,6 +355,7 @@ void frame(void) {
 }
 
 void cleanup(void) {
+    tsf_close(app.music.sound_font);
     saudio_shutdown();
     sfetch_shutdown();
     sdtx_shutdown();
@@ -685,23 +708,23 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
         (sfxid == sfx_pistol))
     {
         for (int i = 0; i < NUM_CHANNELS; i++) {
-            if (app.snd.channels[i].sfxid == sfxid) {
+            if (app.sound.channels[i].sfxid == sfxid) {
                 // reset
-                app.snd.channels[i] = (snd_channel_t){0};
+                app.sound.channels[i] = (snd_channel_t){0};
                 // we are sure that if, there will be only one
                 break;
             }
         }
     }
     */
-    app.snd.channels[slot].sfxid = sfxid;
-    app.snd.cur_sfx_handle += 1;
-    if (app.snd.cur_sfx_handle == 0) {
-        app.snd.cur_sfx_handle = 1;
+    app.sound.channels[slot].sfxid = sfxid;
+    app.sound.cur_sfx_handle += 1;
+    if (app.sound.cur_sfx_handle == 0) {
+        app.sound.cur_sfx_handle = 1;
     }
-    app.snd.channels[slot].handle = (int)app.snd.cur_sfx_handle;
-    app.snd.channels[slot].cur_ptr = S_sfx[sfxid].driver_data;
-    app.snd.channels[slot].end_ptr = app.snd.channels[slot].cur_ptr + app.snd.lengths[sfxid];
+    app.sound.channels[slot].handle = (int)app.sound.cur_sfx_handle;
+    app.sound.channels[slot].cur_ptr = S_sfx[sfxid].driver_data;
+    app.sound.channels[slot].end_ptr = app.sound.channels[slot].cur_ptr + app.sound.lengths[sfxid];
 
     // Separation, that is, orientation/stereo. range is: 1 - 256
     separation += 1;
@@ -716,10 +739,10 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
     int rightvol = volume - ((volume * right_sep * right_sep) >> 16);
     assert((rightvol >= 0) && (rightvol <= 127));
 
-    app.snd.channels[slot].leftvol = leftvol;
-    app.snd.channels[slot].rightvol = rightvol;
+    app.sound.channels[slot].leftvol = leftvol;
+    app.sound.channels[slot].rightvol = rightvol;
 
-    return app.snd.channels[slot].handle;
+    return app.sound.channels[slot].handle;
 }
 
 static float snd_clampf(float val, float maxval, float minval) {
@@ -734,17 +757,17 @@ static float snd_clampf(float val, float maxval, float minval) {
     }
 }
 
-static void snd_mix(int num_sample_frames) {
+static void snd_mix(int num_frames) {
     // mix sound into the mixing buffer
     int frame_index = 0;
-    while (frame_index < num_sample_frames) {
+    while (frame_index < num_frames) {
         // compute new left/right sample?
-        if (app.snd.resample_accum >= app.snd.resample_period) {
-            app.snd.resample_accum -= app.snd.resample_period;
+        if (app.sound.resample_accum >= app.sound.resample_period) {
+            app.sound.resample_accum -= app.sound.resample_period;
             int dl = 0.0f;
             int dr = 0.0f;
             for (int slot = 0; slot < NUM_CHANNELS; slot++) {
-                snd_channel_t* chn = &app.snd.channels[slot];
+                snd_channel_t* chn = &app.sound.channels[slot];
                 if (chn->cur_ptr) {
                     int sample = ((int)(*chn->cur_ptr++)) - 128;
                     dl += sample * chn->leftvol;
@@ -755,24 +778,24 @@ static void snd_mix(int num_sample_frames) {
                     }
                 }
             }
-            app.snd.cur_left_sample = snd_clampf(((float)dl) / 16383.0f, 1.0f, -1.0f);
-            app.snd.cur_right_sample = snd_clampf(((float)dr) / 16383.0f, 1.0f, -1.0f);
+            app.sound.cur_left_sample = snd_clampf(((float)dl) / 16383.0f, 1.0f, -1.0f);
+            app.sound.cur_right_sample = snd_clampf(((float)dr) / 16383.0f, 1.0f, -1.0f);
         }
-        app.snd.resample_accum += app.snd.resample_interval;
+        app.sound.resample_accum += app.sound.resample_interval;
 
         // write left and right sample values to mix buffer
-        app.snd.mixbuffer[frame_index*2]     = app.snd.cur_left_sample;
-        app.snd.mixbuffer[frame_index*2 + 1] = app.snd.cur_right_sample;
+        app.sound.mixbuffer[frame_index*2]     = app.sound.cur_left_sample;
+        app.sound.mixbuffer[frame_index*2 + 1] = app.sound.cur_right_sample;
         frame_index++;
     }
 }
 
 static boolean snd_Init(boolean use_sfx_prefix) {
     assert(use_sfx_prefix);
-    app.snd.use_sfx_prefix = use_sfx_prefix;
-    assert(app.snd.use_sfx_prefix);
-    app.snd.resample_period = app.snd.resample_accum = saudio_sample_rate();
-    app.snd.resample_interval = 11025;    // sound effect are in 11025Hz
+    app.sound.use_sfx_prefix = use_sfx_prefix;
+    assert(app.sound.use_sfx_prefix);
+    app.sound.resample_period = app.sound.resample_accum = saudio_sample_rate();
+    app.sound.resample_interval = 11025;    // sound effect are in 11025Hz
     return true;
 }
 
@@ -782,7 +805,7 @@ static void snd_Shutdown(void) {
 
 static int snd_GetSfxLumpNum(sfxinfo_t* sfx) {
     char namebuf[20];
-    if (app.snd.use_sfx_prefix) {
+    if (app.sound.use_sfx_prefix) {
         M_snprintf(namebuf, sizeof(namebuf), "dp%s", sfx->name);
     }
     else {
@@ -823,15 +846,15 @@ static int snd_StartSound(sfxinfo_t* sfxinfo, int channel, int vol, int sep) {
 
 static void snd_StopSound(int handle) {
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        if (app.snd.channels[i].handle == handle) {
-            app.snd.channels[i] = (snd_channel_t){0};
+        if (app.sound.channels[i].handle == handle) {
+            app.sound.channels[i] = (snd_channel_t){0};
         }
     }
 }
 
 static boolean snd_SoundIsPlaying(int handle) {
     for (int i = 0; i < NUM_CHANNELS; i++) {
-        if (app.snd.channels[i].handle == handle) {
+        if (app.sound.channels[i].handle == handle) {
             return true;
         }
     }
@@ -842,25 +865,27 @@ static void snd_CacheSounds(sfxinfo_t* sounds, int num_sounds) {
     for (int i = 0; i < num_sounds; i++) {
         if (0 == sounds[i].link) {
             // load data from WAD file
-            sounds[i].driver_data = snd_getsfx(sounds[i].name, &app.snd.lengths[i]);
+            sounds[i].driver_data = snd_getsfx(sounds[i].name, &app.sound.lengths[i]);
         }
         else {
             // previously loaded already?
             const int snd_index = sounds[i].link - sounds;
             assert((snd_index >= 0) && (snd_index < NUMSFX));
             sounds[i].driver_data = sounds[i].link->driver_data;
-            app.snd.lengths[i] = app.snd.lengths[snd_index];
+            app.sound.lengths[i] = app.sound.lengths[snd_index];
         }
     }
 }
 
 static snddevice_t sound_sokol_devices[] = {
     SNDDEVICE_SB,
+    /* SOKOL CHANGE
     SNDDEVICE_PAS,
     SNDDEVICE_GUS,
     SNDDEVICE_WAVEBLASTER,
     SNDDEVICE_SOUNDCANVAS,
     SNDDEVICE_AWE32,
+    */
 };
 
 sound_module_t sound_sokol_module = {
@@ -878,20 +903,55 @@ sound_module_t sound_sokol_module = {
 };
 
 /*== MUSIC SUPPORT ===========================================================*/
+
+// see: https://github.com/mattiasgustavsson/doom-crt/blob/f5108fe122fa9c2a334a0ae387d36ddbabc5bf1a/linuxdoom-1.10/i_sound.c#L576
+static void mus_mix(int num_frames) {
+    mus_t* mus = app.music.mus;
+    if (!mus) {
+        return;
+    }
+    if (app.music.reset) {
+        tsf_reset(app.music.sound_font);
+        app.music.reset = false;
+    }
+    tsf_set_volume(app.music.sound_font, app.music.volume);
+    int leftover_from_previous = app.music.left_over;
+    int remaining = num_frames;
+    float* output = app.sound.mixbuffer;
+    int leftover = 0;
+    if (leftover_from_previous > 0) {
+        int count = leftover_from_previous;
+        if (count > remaining) {
+            leftover = count - remaining;
+            count = remaining;
+        }
+        tsf_render_float(app.music.sound_font, output, count, 1);
+        remaining -= count;
+        output += count * 2;
+    }
+
+    
+
+}
+
 static boolean mus_Init(void) {
     printf(">>> mus_Init()\n");
-    // FIXME
+    app.music.reset = true;
+    app.music.volume = 7;
     return true;
 }
 
 static void mus_Shutdown(void) {
     printf(">>> mus_Shutdown()\n");
-    // FIXME
+    if (app.music.mus) {
+        mus_destroy(app.music.mus);
+        app.music.mus = 0;
+    }
 }
 
 static void mus_SetMusicVolume(int volume) {
-    printf(">>> mus_SetMusicVolume(volume:%d)", volume);
-    // FIXME
+    printf(">>> mus_SetMusicVolume(volume:%d)\n", volume);
+    app.music.volume = ((float)volume / 64.0f);
 }
 
 static void mus_PauseMusic(void) {
@@ -906,42 +966,58 @@ static void mus_ResumeMusic(void) {
 
 static void* mus_RegisterSong(void* data, int len) {
     printf(">>> mus_RegisterSong(data:%p, len:%d)\n", data, len);
-    // FIXME
+    app.music.cur_song_data = data;
+    app.music.cur_song_len = len;
     return 0;
 }
 
 static void mus_UnRegisterSong(void* handle) {
     printf(">>> mus_UnRegisterSong(handle:%p)\n", handle);
-    // FIXME
+    app.music.cur_song_data = 0;
+    app.music.cur_song_len = 0;
 }
 
 static void mus_PlaySong(void* handle, boolean looping) {
     printf(">>> mus_PlaySong(handle:%p, looping:%s)\n", handle, looping?"true":"false");
-    // FIXME
+    if (app.music.mus) {
+        mus_destroy(app.music.mus);
+        app.music.mus = 0;
+    }
+    assert(app.music.cur_song_data);
+    assert(app.music.cur_song_len == *(((uint16_t*)app.music.cur_song_data)+2 ) + *(((uint16_t*)app.music.cur_song_data)+3));
+    app.music.mus = mus_create(app.music.cur_song_data, app.music.cur_song_len, 0);
+    assert(app.music.mus);
+    app.music.left_over = 0;
+    app.music.reset = true;
 }
 
 static void mus_StopSong(void) {
     printf(">>> mus_StopSong()\n");
-    // FIXME
+    assert(app.music.mus);
+    mus_destroy(app.music.mus);
+    app.music.mus = 0;
+    app.music.left_over = 0;
+    app.music.reset = true;
 }
 
 static boolean mus_MusicIsPlaying(void) {
-    printf(">>> mus_MusicIsPlaying()\n");
-    // FIXME
+    // never called
     return false;
 }
 
 static void mus_Poll(void) {
-    printf(">>> mus_Poll()\n");
+//    printf(">>> mus_Poll()\n");
     // FIXME
 }
 
 static snddevice_t music_sokol_devices[] = {
+/* SOKOL CHANGE
     SNDDEVICE_PAS,
     SNDDEVICE_GUS,
     SNDDEVICE_WAVEBLASTER,
     SNDDEVICE_SOUNDCANVAS,
     SNDDEVICE_GENMIDI,
+*/
     SNDDEVICE_AWE32,
 };
 
