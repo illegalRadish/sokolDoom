@@ -27,8 +27,6 @@
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
 
-#include "soundfont.h"
-
 #include <stdio.h> // printf
 
 // in m_menu.c
@@ -43,6 +41,8 @@ void dg_Create();
 #define MAXSAMPLECOUNT (2048)
 #define NUM_CHANNELS (8)
 #define MIXBUFFERSIZE (MAXSAMPLECOUNT * 2)
+#define MAX_WAD_SIZE (6 * 1024 * 1024)
+#define MAX_SOUNDFONT_SIZE (2 * 1024 * 1024)
 
 typedef enum {
     APP_STATE_LOADING,
@@ -65,6 +65,12 @@ typedef struct {
     int leftvol;
     int rightvol;
 } snd_channel_t;
+
+typedef enum {
+    DATA_STATE_LOADING,
+    DATA_STATE_VALID,
+    DATA_STATE_FAILED,
+} data_state_t;
 
 static struct {
     app_state_t state;
@@ -97,19 +103,45 @@ static struct {
         bool reset;
         int leftover;
     } music;
+    struct {
+        struct {
+            data_state_t state;
+            size_t size;
+            uint8_t buf[MAX_WAD_SIZE];
+        } wad;
+        struct {
+            data_state_t state;
+            size_t size;
+            uint8_t buf[MAX_SOUNDFONT_SIZE];
+        } sf;
+    } data;
 } app;
 
-#define MAX_WAD_SIZE (6 * 1024 * 1024)
-static size_t wad_size;
-static uint8_t wad_buffer[MAX_WAD_SIZE];
-
-void fetch_callback(const sfetch_response_t* response) {
+void wad_fetch_callback(const sfetch_response_t* response) {
     if (response->fetched) {
-        wad_size = response->fetched_size;
-        app.state = APP_STATE_WAITING;
+        app.data.wad.size = response->fetched_size;
+        app.data.wad.state = DATA_STATE_VALID;
+        if (app.data.sf.state == DATA_STATE_VALID) {
+            app.state = APP_STATE_WAITING;
+        }
     }
     else if (response->failed) {
         app.state = APP_STATE_LOADING_FAILED;
+        app.data.wad.state = DATA_STATE_FAILED;
+    }
+}
+
+void sf_fetch_callback(const sfetch_response_t* response) {
+    if (response->fetched) {
+        app.data.sf.size = response->fetched_size;
+        app.data.sf.state = DATA_STATE_VALID;
+        if (app.data.wad.state == DATA_STATE_VALID) {
+            app.state = APP_STATE_WAITING;
+        }
+    }
+    else if (response->failed) {
+        app.state = APP_STATE_LOADING_FAILED;
+        app.data.sf.state = DATA_STATE_FAILED;
     }
 }
 
@@ -129,9 +161,9 @@ void init(void) {
         .fonts[0] = sdtx_font_kc854(),
     });
     sfetch_setup(&(sfetch_desc_t){
-        .max_requests = 1,
+        .max_requests = 2,
         .num_channels = 1,
-        .num_lanes = 1,
+        .num_lanes = 2,
     });
     saudio_setup(&(saudio_desc){
         .buffer_frames = MAXSAMPLECOUNT,
@@ -178,37 +210,56 @@ void init(void) {
         }
     });
 
-    // start loading the DOOM1.WAD file, the game start will be delayed
+    // start loading the DOOM1.WAD and soundfont files, the game start will be delayed
     // until this has finished (see the frame() callback below)
+    // NOTE: those files have .wasm extension only so that they are compressed
+    // by web servers, they are not actually WASM files!
     sfetch_send(&(sfetch_request_t){
-        .path = "DOOM1.WAD",
-        .callback = fetch_callback,
-        .buffer_ptr = wad_buffer,
-        .buffer_size = sizeof(wad_buffer)
+        .path = "doom1.wad.wasm",
+        .callback = wad_fetch_callback,
+        .buffer_ptr = app.data.wad.buf,
+        .buffer_size = sizeof(app.data.wad.buf)
+    });
+    sfetch_send(&(sfetch_request_t){
+        .path = "aweromgm.sf2.wasm",
+        .callback = sf_fetch_callback,
+        .buffer_ptr = app.data.sf.buf,
+        .buffer_size = sizeof(app.data.sf.buf)
     });
     app.state = APP_STATE_LOADING;
-
-    // initialize sound font
-    app.music.sound_font = tsf_load_memory(soundfont, sizeof(soundfont));
-    tsf_set_output(app.music.sound_font, TSF_STEREO_INTERLEAVED, saudio_sample_rate(), 0);
 }
 
-static void begin_init_screen(void) {
+static void draw_loading_msg(const char* name, data_state_t data_state) {
+    sdtx_color3f(0.75f, 0.75f, 0.75f);
+    sdtx_printf("Loading %s", name);
+    switch (data_state) {
+        case DATA_STATE_LOADING:
+            for (int i = 0; i < ((sapp_frame_count() / 20) & 3); i++) {
+                sdtx_putc('.');
+            }
+            sdtx_putc('\n');
+            break;
+        case DATA_STATE_VALID:
+            sdtx_puts(" ... OK\n");
+            break;
+        case DATA_STATE_FAILED:
+            sdtx_puts(" ... ");
+            if ((sapp_frame_count() / 20) & 1) {
+                sdtx_color3f(1.0f, 0.0f, 0.0f);
+                sdtx_puts("FAILED!\n");
+            }
+            else {
+                sdtx_putc('\n');
+            }
+            break;
+    }
+    sdtx_color3f(0.75f, 0.75f, 0.75f);
+}
+
+// draw a simple loading message during async WAD file loading
+static void draw_greeting_screen(void) {
     sdtx_canvas(sapp_widthf(), sapp_height() * 0.5f);
     sdtx_origin(2.0f, 1.0f);
-}
-
-static void end_init_screen(void) {
-    sg_pass_action pass_action = {
-        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.0f, 0.0f, 0.0f, 1.0f } }
-    };
-    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
-    sdtx_draw();
-    sg_end_pass();
-    sg_commit();
-}
-
-static void draw_greeting_message(void) {
     sdtx_color3f(0.75f, 0.75f, 0.75f);
     sdtx_puts("*** DOOM (shareware) ***\n\n");
     sdtx_puts("Ported to the Sokol headers.\n\n");
@@ -224,38 +275,23 @@ static void draw_greeting_message(void) {
     sdtx_puts("Ctrl / LMB:     fire weapon\n\n");
     sdtx_puts("Space:          use door\n\n");
     sdtx_puts("\n");
-}
 
-// draw a simple loading message during async WAD file loading
-static void draw_loading_screen(void) {
-    begin_init_screen();
-    draw_greeting_message();
-    sdtx_puts("Loading DOOM1.WAD");
-    for (int i = 0; i < ((sapp_frame_count() / 20) & 3); i++) {
-        sdtx_putc('.');
-    }
-    end_init_screen();
-}
+    draw_loading_msg("WAD file", app.data.wad.state);
+    draw_loading_msg("sound font", app.data.sf.state);
 
-// draw the greeting screen with a 'press key to start' message
-static void draw_waiting_screen(void) {
-    begin_init_screen();
-    draw_greeting_message();
-    if ((sapp_frame_count() / 20) & 1) {
-        sdtx_puts("Press any key to start game!");
+    if (app.state == APP_STATE_WAITING) {
+        if ((sapp_frame_count() / 20) & 1) {
+            sdtx_puts("\nPress any key to start game!");
+        }
     }
-    end_init_screen();
-}
 
-// draw an error screen if WAD file loading failed
-static void draw_loading_failed_screen(void) {
-    begin_init_screen();
-    draw_greeting_message();
-    if ((sapp_frame_count() / 20) & 1) {
-        sdtx_color3b(255, 0, 0);
-        sdtx_puts("LOADING DOOM1.WAD FAILED!");
-    }
-    end_init_screen();
+    sg_pass_action pass_action = {
+        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.0f, 0.0f, 0.0f, 1.0f } }
+    };
+    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sdtx_draw();
+    sg_end_pass();
+    sg_commit();
 }
 
 // helper function to adjust aspect ratio
@@ -317,10 +353,9 @@ void frame(void) {
     sfetch_dowork();
     switch (app.state) {
         case APP_STATE_LOADING:
-            draw_loading_screen();
-            break;
         case APP_STATE_WAITING:
-            draw_waiting_screen();
+        case APP_STATE_LOADING_FAILED:
+            draw_greeting_screen();
             break;
         case APP_STATE_INIT:
             dg_Create();
@@ -346,10 +381,6 @@ void frame(void) {
             }
             update_game_audio();
             draw_game_frame();
-            break;
-
-        case APP_STATE_LOADING_FAILED:
-            draw_loading_failed_screen();
             break;
     }
 }
@@ -577,7 +608,10 @@ sapp_desc sokol_main(int argc, char* argv[]) {
 // in an "own the game loop" scenario, not in a frame-callback scenario.
 
 void DG_Init(void) {
-    // empty, see sokol-app init() callback instead
+    // initialize sound font
+    assert(app.data.sf.size > 0);
+    app.music.sound_font = tsf_load_memory(app.data.sf.buf, app.data.sf.size);
+    tsf_set_output(app.music.sound_font, TSF_STEREO_INTERLEAVED, saudio_sample_rate(), 0);
 }
 
 void DG_DrawFrame(void) {
@@ -634,7 +668,8 @@ static wad_file_t* memio_OpenFile(char* path) {
     if (0 != strcmp(path, "DOOM1.WAD")) {
         return 0;
     }
-    MEMFILE* fstream = mem_fopen_read(wad_buffer, wad_size);
+    assert(app.data.wad.size > 0);
+    MEMFILE* fstream = mem_fopen_read(app.data.wad.buf, app.data.wad.size);
     if (fstream == 0) {
         return 0;
     }
@@ -642,7 +677,7 @@ static wad_file_t* memio_OpenFile(char* path) {
     memio_wad_file_t* result = Z_Malloc(sizeof(memio_wad_file_t), PU_STATIC, 0);
     result->wad.file_class = &memio_wad_file;
     result->wad.mapped = NULL;
-    result->wad.length = wad_size;
+    result->wad.length = app.data.wad.size;
     result->fstream = fstream;
 
     return &result->wad;
