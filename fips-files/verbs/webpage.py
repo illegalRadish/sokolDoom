@@ -19,7 +19,8 @@ def build_deploy_webpage(fips_dir, proj_dir):
     shutil.copy(src_dir+'/doom.html', dst_dir+'/index.html')
     shutil.copy(src_dir+'/doom.wasm', dst_dir+'/doom.wasm')
     shutil.copy(src_dir+'/doom.js', dst_dir+'/doom.js')
-    shutil.copy(src_dir+'/DOOM1.WAD', dst_dir+'/DOOM1.WAD')
+    shutil.copy(src_dir+'/doom1.wad.wasm', dst_dir+'/doom1.wad.wasm')
+    shutil.copy(src_dir+'/aweromgm.sf2.wasm', dst_dir+'/aweromgm.sf2.wasm')
 
     log.colored(log.GREEN, 'Generated web page under {}.'.format(webpage_dir))
 

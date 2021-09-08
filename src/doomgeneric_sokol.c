@@ -855,7 +855,6 @@ static void snd_Update(void) {
 }
 
 static void snd_UpdateSoundParams(int handle, int vol, int sep) {
-//    printf(">>> snd_UpdateSoundParams(handle:%d, vol:%d, sep:%d)\n", handle, vol, sep);
     // FIXME
 }
 
@@ -1055,14 +1054,12 @@ static void mus_mix(int num_frames) {
 }
 
 static boolean mus_Init(void) {
-    printf(">>> mus_Init()\n");
     app.music.reset = true;
     app.music.volume = 7;
     return true;
 }
 
 static void mus_Shutdown(void) {
-    printf(">>> mus_Shutdown()\n");
     if (app.music.mus) {
         mus_destroy(app.music.mus);
         app.music.mus = 0;
@@ -1070,35 +1067,29 @@ static void mus_Shutdown(void) {
 }
 
 static void mus_SetMusicVolume(int volume) {
-    printf(">>> mus_SetMusicVolume(volume:%d)\n", volume);
     app.music.volume = ((float)volume / 64.0f);
 }
 
 static void mus_PauseMusic(void) {
-    printf(">>> mus_PauseMusic()\n");
     // FIXME
 }
 
 static void mus_ResumeMusic(void) {
-    printf(">>> mus_ResumeMusic()\n");
     // FIXME
 }
 
 static void* mus_RegisterSong(void* data, int len) {
-    printf(">>> mus_RegisterSong(data:%p, len:%d)\n", data, len);
     app.music.cur_song_data = data;
     app.music.cur_song_len = len;
     return 0;
 }
 
 static void mus_UnRegisterSong(void* handle) {
-    printf(">>> mus_UnRegisterSong(handle:%p)\n", handle);
     app.music.cur_song_data = 0;
     app.music.cur_song_len = 0;
 }
 
 static void mus_PlaySong(void* handle, boolean looping) {
-    printf(">>> mus_PlaySong(handle:%p, looping:%s)\n", handle, looping?"true":"false");
     if (app.music.mus) {
         mus_destroy(app.music.mus);
         app.music.mus = 0;
@@ -1112,7 +1103,6 @@ static void mus_PlaySong(void* handle, boolean looping) {
 }
 
 static void mus_StopSong(void) {
-    printf(">>> mus_StopSong()\n");
     assert(app.music.mus);
     mus_destroy(app.music.mus);
     app.music.mus = 0;
@@ -1126,7 +1116,6 @@ static boolean mus_MusicIsPlaying(void) {
 }
 
 static void mus_Poll(void) {
-//    printf(">>> mus_Poll()\n");
     // FIXME
 }
 
