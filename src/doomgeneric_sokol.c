@@ -75,9 +75,12 @@ typedef enum {
 static struct {
     app_state_t state;
     sg_buffer vbuf;
-    sg_image pix_img;
-    sg_image pal_img;
-    sg_pipeline pip;
+    sg_image pal_img;       // 256x1 palette lookup texture
+    sg_image pix_img;       // 320x200 R8 framebuffer texture
+    sg_image rgba_img;      // 320x200 RGBA8 framebuffer texture
+    sg_pipeline offscreen_pip;
+    sg_pipeline display_pip;
+    sg_pass offscreen_pass;
     key_state_t key_queue[KEY_QUEUE_SIZE];
     uint32_t key_write_index;
     uint32_t key_read_index;
@@ -174,8 +177,6 @@ void init(void) {
     });
     printf(">>> sokol_audio sample rate: %d, num channels: %d", saudio_sample_rate(), saudio_channels());
 
-    // create sokol-gfx resources to render a fullscreen texture
-
     // a vertex buffer to render a fullscreen triangle
     const float verts[] = {
         0.0f, 0.0f,
@@ -210,8 +211,39 @@ void init(void) {
         .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
     });
 
-    // a pipeline object to render a textured fullscreen triangle
-    app.pip = sg_make_pipeline(&(sg_pipeline_desc){
+    // an RGBA8 texture to hold the 'color palette expanded' image
+    // and source for upscaling with linear filtering
+    app.rgba_img = sg_make_image(&(sg_image_desc){
+        .render_target = true,
+        .width = SCREENWIDTH,
+        .height = SCREENHEIGHT,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = SG_USAGE_IMMUTABLE,
+        .min_filter = SG_FILTER_LINEAR,
+        .mag_filter = SG_FILTER_LINEAR,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+    });
+
+    // a pipeline object for the offscreen render pass which
+    // performs the color palette lookup
+    app.offscreen_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(offscreen_shader_desc(sg_query_backend())),
+        .layout = {
+            .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
+        },
+        .cull_mode = SG_CULLMODE_NONE,
+        .depth = {
+            .write_enabled = false,
+            .compare = SG_COMPAREFUNC_ALWAYS,
+            .pixel_format = SG_PIXELFORMAT_NONE,
+        },
+        .colors[0].pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+
+    // a pipeline object to upscale the offscreen RGBA8 framebuffer
+    // texture to the display
+    app.display_pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(display_shader_desc(sg_query_backend())),
         .layout = {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
@@ -219,12 +251,17 @@ void init(void) {
         .cull_mode = SG_CULLMODE_NONE,
         .depth = {
             .write_enabled = false,
-            .compare = SG_COMPAREFUNC_ALWAYS
-        }
+            .compare = SG_COMPAREFUNC_ALWAYS,
+        },
+    });
+
+    // a render pass object for the offscreen pass
+    app.offscreen_pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = app.rgba_img,
     });
 
     // start loading the DOOM1.WAD and soundfont files, the game start will be delayed
-    // until this has finished (see the frame() callback below)
+    // until loading has finished (see the frame() callback below)
     // NOTE: those files have .wasm extension only so that they are compressed
     // by web servers, they are not actually WASM files!
     sfetch_send(&(sfetch_request_t){
@@ -344,15 +381,28 @@ static void draw_game_frame(void) {
             .size = 256 * sizeof(uint32_t)
         }
     });
+
     const sg_pass_action pass_action = { .colors[0] = { .action = SG_ACTION_DONTCARE } };
-    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
-    sg_apply_pipeline(app.pip);
+
+    // offscreen render pass to perform color palette lookup
+    sg_begin_pass(app.offscreen_pass, &pass_action);
+    sg_apply_pipeline(app.offscreen_pip);
     sg_apply_bindings(&(sg_bindings){
         .vertex_buffers[0] = app.vbuf,
         .fs_images = {
             [SLOT_pix_img] = app.pix_img,
             [SLOT_pal_img] = app.pal_img,
         }
+    });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+
+    // render resulting texture to display framebuffer with upscaling
+    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+    sg_apply_pipeline(app.display_pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = app.vbuf,
+        .fs_images[SLOT_rgba_img] = app.rgba_img
     });
     apply_viewport(sapp_widthf(), sapp_heightf());
     sg_draw(0, 3, 1);

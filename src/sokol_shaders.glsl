@@ -1,4 +1,4 @@
-@vs display_vs
+@vs vs
 
 layout(location=0) in vec2 in_pos;
 out vec2 uv;
@@ -9,7 +9,8 @@ void main() {
 }
 @end
 
-@fs display_fs
+// pixel shader to perform color palette lookup
+@fs offscreen_fs
 
 uniform sampler2D pix_img;
 uniform sampler2D pal_img;
@@ -22,4 +23,17 @@ void main() {
 }
 @end
 
-@program display display_vs display_fs
+// pixel shader to perform upscale-rendering to display framebuffer
+@fs display_fs
+
+uniform sampler2D rgba_img;
+in vec2 uv;
+out vec4 frag_color;
+
+void main() {
+    frag_color = texture(rgba_img, uv);
+}
+@end
+
+@program offscreen vs offscreen_fs
+@program display vs display_fs
