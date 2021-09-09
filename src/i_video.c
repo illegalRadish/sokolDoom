@@ -71,14 +71,16 @@ struct FB_ScreenInfo
 	struct FB_BitField transp;	/* transparency			*/
 };
 
-static struct FB_ScreenInfo s_Fb;
-int fb_scaling = 1;
+// SOKOL CHANGE
+//static struct FB_ScreenInfo s_Fb;
+//static int fb_scaling = 1;
 int usemouse = 0;
 
+// SOKOL CHANGE (BGRA vs RGBA)
 struct color {
-    uint32_t b:8;
-    uint32_t g:8;
     uint32_t r:8;
+    uint32_t g:8;
+    uint32_t b:8;
     uint32_t a:8;
 };
 
@@ -126,6 +128,7 @@ typedef struct
 
 static uint16_t rgb565_palette[256];
 
+/* SOKOL CHANGE
 void cmap_to_rgb565(uint16_t * out, uint8_t * in, int in_pixels)
 {
     int i, j;
@@ -156,7 +159,7 @@ void cmap_to_fb(uint8_t * out, uint8_t * in, int in_pixels)
 
     for (i = 0; i < in_pixels; i++)
     {
-        c = colors[*in];  /* R:8 G:8 B:8 format! */
+        c = colors[*in];  // R:8 G:8 B:8 format!
         r = (uint16_t)(c.r >> (8 - s_Fb.red.length));
         g = (uint16_t)(c.g >> (8 - s_Fb.green.length));
         b = (uint16_t)(c.b >> (8 - s_Fb.blue.length));
@@ -173,9 +176,11 @@ void cmap_to_fb(uint8_t * out, uint8_t * in, int in_pixels)
         in++;
     }
 }
+*/
 
 void I_InitGraphics (void)
 {
+    /* SOKOL CHANGE
     int i;
 
 	memset(&s_Fb, 0, sizeof(struct FB_ScreenInfo));
@@ -217,7 +222,7 @@ void I_InitGraphics (void)
             fb_scaling = s_Fb.yres / SCREENHEIGHT;
         printf("I_InitGraphics: Auto-scaling factor: %d\n", fb_scaling);
     }
-
+    */
 
     /* Allocate screen to draw to */
 	I_VideoBuffer = (byte*)Z_Malloc (SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);  // For DOOM to draw on
@@ -253,20 +258,21 @@ void I_UpdateNoBlit (void)
 
 void I_FinishUpdate (void)
 {
+/* SOKOL CHANGE
     int y;
     int x_offset, y_offset, x_offset_end;
     unsigned char *line_in, *line_out;
 
-    /* Offsets in case FB is bigger than DOOM */
-    /* 600 = s_Fb heigt, 200 screenheight */
-    /* 600 = s_Fb heigt, 200 screenheight */
-    /* 2048 =s_Fb width, 320 screenwidth */
+    // Offsets in case FB is bigger than DOOM
+    // 600 = s_Fb heigt, 200 screenheight
+    // 600 = s_Fb heigt, 200 screenheight
+    // 2048 =s_Fb width, 320 screenwidth
     y_offset     = (((s_Fb.yres - (SCREENHEIGHT * fb_scaling)) * s_Fb.bits_per_pixel/8)) / 2;
     x_offset     = (((s_Fb.xres - (SCREENWIDTH  * fb_scaling)) * s_Fb.bits_per_pixel/8)) / 2; // XXX: siglent FB hack: /4 instead of /2, since it seems to handle the resolution in a funny way
     //x_offset     = 0;
     x_offset_end = ((s_Fb.xres - (SCREENWIDTH  * fb_scaling)) * s_Fb.bits_per_pixel/8) - x_offset;
 
-    /* DRAW SCREEN */
+    // DRAW SCREEN
     line_in  = (unsigned char *) I_VideoBuffer;
     line_out = (unsigned char *) DG_ScreenBuffer;
 
@@ -279,7 +285,7 @@ void I_FinishUpdate (void)
             line_out += x_offset;
 #ifdef CMAP256
             for (fb_scaling == 1) {
-                memcpy(line_out, line_in, SCREENWIDTH); /* fb_width is bigger than Doom SCREENWIDTH... */
+                memcpy(line_out, line_in, SCREENWIDTH); // fb_width is bigger than Doom SCREENWIDTH...
             } else {
                 //XXX FIXME fb_scaling support!
             }
@@ -293,6 +299,7 @@ void I_FinishUpdate (void)
     }
 
 	DG_DrawFrame();
+*/
 }
 
 //
@@ -337,6 +344,10 @@ void I_SetPalette (byte* palette)
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];
     }
+}
+
+byte* I_GetPalette(void) {
+    return (byte*)colors;
 }
 
 // Given an RGB value, find the closest matching palette index.

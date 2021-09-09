@@ -75,7 +75,8 @@ typedef enum {
 static struct {
     app_state_t state;
     sg_buffer vbuf;
-    sg_image img;
+    sg_image pix_img;
+    sg_image pal_img;
     sg_pipeline pip;
     key_state_t key_queue[KEY_QUEUE_SIZE];
     uint32_t key_write_index;
@@ -186,13 +187,25 @@ void init(void) {
     });
 
     // a dynamic texture for Doom's framebuffer
-    app.img = sg_make_image(&(sg_image_desc){
-        .width = DOOMGENERIC_RESX,
-        .height = DOOMGENERIC_RESY,
+    app.pix_img = sg_make_image(&(sg_image_desc){
+        .width = SCREENWIDTH,
+        .height = SCREENHEIGHT,
+        .pixel_format = SG_PIXELFORMAT_R8,
+        .usage = SG_USAGE_STREAM,
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+    });
+
+    // another dynamic texture for the color palette
+    app.pal_img = sg_make_image(&(sg_image_desc){
+        .width = 256,
+        .height = 1,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage = SG_USAGE_STREAM,
-        .min_filter = SG_FILTER_LINEAR,
-        .mag_filter = SG_FILTER_LINEAR,
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
         .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
         .wrap_v = SG_WRAP_CLAMP_TO_EDGE,
     });
@@ -297,8 +310,8 @@ static void draw_greeting_screen(void) {
 // helper function to adjust aspect ratio
 static void apply_viewport(float canvas_width, float canvas_height) {
     const float canvas_aspect = canvas_width / canvas_height;
-    const float doom_width = (float)DOOMGENERIC_RESX;
-    const float doom_height = (float)DOOMGENERIC_RESY;
+    const float doom_width = (float)SCREENWIDTH;
+    const float doom_height = (float)SCREENHEIGHT;
     const float doom_aspect = doom_width / doom_height;
     float vp_x, vp_y, vp_w, vp_h;
     if (doom_aspect < canvas_aspect) {
@@ -318,10 +331,17 @@ static void apply_viewport(float canvas_width, float canvas_height) {
 
 // copy the Doom framebuffer into sokol-gfx texture and render to display
 static void draw_game_frame(void) {
-    sg_update_image(app.img, &(sg_image_data){
+    // update pixel and palette textures
+    sg_update_image(app.pix_img, &(sg_image_data){
         .subimage[0][0] = {
-            .ptr = DG_ScreenBuffer,
-            .size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t)
+            .ptr = I_VideoBuffer,
+            .size = SCREENWIDTH * SCREENHEIGHT,
+        }
+    });
+    sg_update_image(app.pal_img, &(sg_image_data){
+        .subimage[0][0] = {
+            .ptr = I_GetPalette(),
+            .size = 256 * sizeof(uint32_t)
         }
     });
     const sg_pass_action pass_action = { .colors[0] = { .action = SG_ACTION_DONTCARE } };
@@ -329,7 +349,10 @@ static void draw_game_frame(void) {
     sg_apply_pipeline(app.pip);
     sg_apply_bindings(&(sg_bindings){
         .vertex_buffers[0] = app.vbuf,
-        .fs_images[0] = app.img,
+        .fs_images = {
+            [SLOT_pix_img] = app.pix_img,
+            [SLOT_pal_img] = app.pal_img,
+        }
     });
     apply_viewport(sapp_widthf(), sapp_heightf());
     sg_draw(0, 3, 1);
@@ -595,8 +618,8 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = input,
-        .width = DOOMGENERIC_RESX * 3,
-        .height = DOOMGENERIC_RESY * 3,
+        .width = SCREENWIDTH * 3,
+        .height = SCREENHEIGHT * 3,
         .window_title = "Sokol Doom Shareware",
         .icon.sokol_default = true,
     };

@@ -104,6 +104,9 @@ void I_ShutdownGraphics(void);
 void I_SetPalette (byte* palette);
 int I_GetPaletteIndex(int r, int g, int b);
 
+// SOKOL CHANGE
+byte* I_GetPalette(void);
+
 void I_UpdateNoBlit (void);
 void I_FinishUpdate (void);
 
