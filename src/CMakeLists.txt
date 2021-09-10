@@ -111,7 +111,7 @@ fips_begin_app(doom windowed)
     fipsutil_copy(doom-assets.yml)
 fips_end_app()
 
-if (FIPS_CLANG)
+if (FIPS_CLANG OR FIPS_GCC)
     target_compile_options(doom PRIVATE 
         -Wno-unknown-warning-option
         -Wno-sign-compare
@@ -121,5 +121,14 @@ if (FIPS_CLANG)
         -Wno-unused-but-set-variable
         -Wno-absolute-value
         -Wno-null-pointer-subtraction
+        -Wno-pointer-to-int-cast
+    )
+endif()
+if (FIPS_GCC)
+    target_compile_options(doom PRIVATE
+        -Wno-implicit-fallthrough
+        -Wno-enum-conversion
+        -Wno-format-truncation
+        -Wno-type-limits
     )
 endif()
