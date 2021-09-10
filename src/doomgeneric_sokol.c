@@ -670,7 +670,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .event_cb = input,
         .width = SCREENWIDTH * 3,
         .height = SCREENHEIGHT * 3,
-        .window_title = "Sokol Doom Shareware",
+        .window_title = "Doom (shareware) on Sokol",
         .icon.sokol_default = true,
     };
 }
@@ -805,9 +805,11 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
     assert((slot >= 0) && (slot < NUM_CHANNELS));
     assert((sfxid >= 0) && (sfxid < NUMSFX));
 
+    /* SOKOL CHANGE: this doesn't seem to be necessary unless the
+       sound playback is in an extern process (like fbDoom's sndserv)
+
     // Chainsaw troubles.
     // Play these sound effects only one at a time.
-    /*
     if ((sfxid == sfx_sawup) ||
         (sfxid == sfx_sawidl) ||
         (sfxid == sfx_sawful) ||
@@ -827,6 +829,7 @@ static int snd_addsfx(int sfxid, int slot, int volume, int separation) {
     */
     app.sound.channels[slot].sfxid = sfxid;
     app.sound.cur_sfx_handle += 1;
+    // on wraparound skip the 'invalid handle' 0
     if (app.sound.cur_sfx_handle == 0) {
         app.sound.cur_sfx_handle = 1;
     }
@@ -865,11 +868,10 @@ static float snd_clampf(float val, float maxval, float minval) {
     }
 }
 
+// mix active sound channels into the mixing buffer
 static void snd_mix(int num_frames) {
-    // mix sound into the mixing buffer
-    int frame_index = 0;
-    while (frame_index < num_frames) {
-        // compute new left/right sample?
+    for (int frame_index = 0; frame_index < num_frames; frame_index++) {
+        // downsampling: compute new left/right sample?
         if (app.sound.resample_accum >= app.sound.resample_outhz) {
             app.sound.resample_accum -= app.sound.resample_outhz;
             int dl = 0;
@@ -894,7 +896,6 @@ static void snd_mix(int num_frames) {
         // write left and right sample values to mix buffer
         app.sound.mixbuffer[frame_index*2]     = app.sound.cur_left_sample;
         app.sound.mixbuffer[frame_index*2 + 1] = app.sound.cur_right_sample;
-        frame_index++;
     }
 }
 
@@ -1189,7 +1190,7 @@ static boolean mus_MusicIsPlaying(void) {
 }
 
 static void mus_Poll(void) {
-    // FIXME
+    // empty, see update_game_audio() instead
 }
 
 static snddevice_t music_sokol_devices[] = {
@@ -1218,5 +1219,3 @@ music_module_t music_sokol_module = {
     .MusicIsPlaying = mus_MusicIsPlaying,
     .Poll = mus_Poll,
 };
-
-
