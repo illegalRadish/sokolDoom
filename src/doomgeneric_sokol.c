@@ -514,6 +514,10 @@ static int AccelerateMouse(int val) {
     if (val < 0) {
         return -AccelerateMouse(-val);
     }
+    // Win32 hack to speed up mouse, this should probably happen in sokol_app.h
+    #ifdef _WIN32
+    val *= 4;
+    #endif
     if (val > mouse_threshold) {
         return (int)((val - mouse_threshold) * mouse_acceleration + mouse_threshold);
     }
