@@ -27,7 +27,7 @@
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
 
-#include <stdio.h> // printf
+#include <math.h>  // round
 
 // in m_menu.c
 extern boolean menuactive;
@@ -74,18 +74,25 @@ typedef enum {
 
 static struct {
     app_state_t state;
-    sg_buffer vbuf;
-    sg_image pal_img;       // 256x1 palette lookup texture
-    sg_image pix_img;       // 320x200 R8 framebuffer texture
-    sg_image rgba_img;      // 320x200 RGBA8 framebuffer texture
-    sg_pipeline offscreen_pip;
-    sg_pipeline display_pip;
-    sg_pass offscreen_pass;
-    key_state_t key_queue[KEY_QUEUE_SIZE];
-    uint32_t key_write_index;
-    uint32_t key_read_index;
-    uint32_t mouse_button_state;
-    uint32_t delayed_mouse_button_up;
+    uint64_t laptime;
+    uint32_t frames_per_tick;   // number of frames per game tick
+    uint32_t frame_tick_counter;
+    struct {
+        sg_buffer vbuf;
+        sg_image pal_img;       // 256x1 palette lookup texture
+        sg_image pix_img;       // 320x200 R8 framebuffer texture
+        sg_image rgba_img;      // 320x200 RGBA8 framebuffer texture
+        sg_pipeline offscreen_pip;
+        sg_pipeline display_pip;
+        sg_pass offscreen_pass;
+    } gfx;
+    struct {
+        key_state_t key_queue[KEY_QUEUE_SIZE];
+        uint32_t key_write_index;
+        uint32_t key_read_index;
+        uint32_t mouse_button_state;
+        uint32_t delayed_mouse_button_up;
+    } inp;
     struct {
         bool use_sfx_prefix;
         uint16_t cur_sfx_handle;
@@ -175,7 +182,6 @@ void init(void) {
         .num_packets = MAXSAMPLECOUNT / 128,
         .num_channels = 2,
     });
-    printf(">>> sokol_audio sample rate: %d, num channels: %d", saudio_sample_rate(), saudio_channels());
 
     // a vertex buffer to render a fullscreen triangle
     const float verts[] = {
@@ -183,12 +189,12 @@ void init(void) {
         2.0f, 0.0f,
         0.0f, 2.0f
     };
-    app.vbuf = sg_make_buffer(&(sg_buffer_desc){
+    app.gfx.vbuf = sg_make_buffer(&(sg_buffer_desc){
         .data = SG_RANGE(verts),
     });
 
     // a dynamic texture for Doom's framebuffer
-    app.pix_img = sg_make_image(&(sg_image_desc){
+    app.gfx.pix_img = sg_make_image(&(sg_image_desc){
         .width = SCREENWIDTH,
         .height = SCREENHEIGHT,
         .pixel_format = SG_PIXELFORMAT_R8,
@@ -200,7 +206,7 @@ void init(void) {
     });
 
     // another dynamic texture for the color palette
-    app.pal_img = sg_make_image(&(sg_image_desc){
+    app.gfx.pal_img = sg_make_image(&(sg_image_desc){
         .width = 256,
         .height = 1,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -213,7 +219,7 @@ void init(void) {
 
     // an RGBA8 texture to hold the 'color palette expanded' image
     // and source for upscaling with linear filtering
-    app.rgba_img = sg_make_image(&(sg_image_desc){
+    app.gfx.rgba_img = sg_make_image(&(sg_image_desc){
         .render_target = true,
         .width = SCREENWIDTH,
         .height = SCREENHEIGHT,
@@ -227,7 +233,7 @@ void init(void) {
 
     // a pipeline object for the offscreen render pass which
     // performs the color palette lookup
-    app.offscreen_pip = sg_make_pipeline(&(sg_pipeline_desc){
+    app.gfx.offscreen_pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(offscreen_shader_desc(sg_query_backend())),
         .layout = {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
@@ -243,7 +249,7 @@ void init(void) {
 
     // a pipeline object to upscale the offscreen RGBA8 framebuffer
     // texture to the display
-    app.display_pip = sg_make_pipeline(&(sg_pipeline_desc){
+    app.gfx.display_pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(display_shader_desc(sg_query_backend())),
         .layout = {
             .attrs[0].format = SG_VERTEXFORMAT_FLOAT2
@@ -256,8 +262,8 @@ void init(void) {
     });
 
     // a render pass object for the offscreen pass
-    app.offscreen_pass = sg_make_pass(&(sg_pass_desc){
-        .color_attachments[0].image = app.rgba_img,
+    app.gfx.offscreen_pass = sg_make_pass(&(sg_pass_desc){
+        .color_attachments[0].image = app.gfx.rgba_img,
     });
 
     // start loading the DOOM1.WAD and soundfont files, the game start will be delayed
@@ -369,13 +375,13 @@ static void apply_viewport(float canvas_width, float canvas_height) {
 // copy the Doom framebuffer into sokol-gfx texture and render to display
 static void draw_game_frame(void) {
     // update pixel and palette textures
-    sg_update_image(app.pix_img, &(sg_image_data){
+    sg_update_image(app.gfx.pix_img, &(sg_image_data){
         .subimage[0][0] = {
             .ptr = I_VideoBuffer,
             .size = SCREENWIDTH * SCREENHEIGHT,
         }
     });
-    sg_update_image(app.pal_img, &(sg_image_data){
+    sg_update_image(app.gfx.pal_img, &(sg_image_data){
         .subimage[0][0] = {
             .ptr = I_GetPalette(),
             .size = 256 * sizeof(uint32_t)
@@ -385,13 +391,13 @@ static void draw_game_frame(void) {
     const sg_pass_action pass_action = { .colors[0] = { .action = SG_ACTION_DONTCARE } };
 
     // offscreen render pass to perform color palette lookup
-    sg_begin_pass(app.offscreen_pass, &pass_action);
-    sg_apply_pipeline(app.offscreen_pip);
+    sg_begin_pass(app.gfx.offscreen_pass, &pass_action);
+    sg_apply_pipeline(app.gfx.offscreen_pip);
     sg_apply_bindings(&(sg_bindings){
-        .vertex_buffers[0] = app.vbuf,
+        .vertex_buffers[0] = app.gfx.vbuf,
         .fs_images = {
-            [SLOT_pix_img] = app.pix_img,
-            [SLOT_pal_img] = app.pal_img,
+            [SLOT_pix_img] = app.gfx.pix_img,
+            [SLOT_pal_img] = app.gfx.pal_img,
         }
     });
     sg_draw(0, 3, 1);
@@ -399,10 +405,10 @@ static void draw_game_frame(void) {
 
     // render resulting texture to display framebuffer with upscaling
     sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
-    sg_apply_pipeline(app.display_pip);
+    sg_apply_pipeline(app.gfx.display_pip);
     sg_apply_bindings(&(sg_bindings){
-        .vertex_buffers[0] = app.vbuf,
-        .fs_images[SLOT_rgba_img] = app.rgba_img
+        .vertex_buffers[0] = app.gfx.vbuf,
+        .fs_images[SLOT_rgba_img] = app.gfx.rgba_img
     });
     apply_viewport(sapp_widthf(), sapp_heightf());
     sg_draw(0, 3, 1);
@@ -424,6 +430,17 @@ static void update_game_audio() {
 
 void frame(void) {
     sfetch_dowork();
+
+    // compute frames-per-tick to get us close to the ideal 35 Hz game tick
+    // but without skipping ticks
+    double frame_time_ms = stm_ms(stm_laptime(&app.laptime));
+    if (frame_time_ms > 40.0) {
+        // prevent overly long frames (for instance when in debugger)
+        frame_time_ms = 40.0;
+    }
+    const double tick_time_ms = 1000.0 / 35.0;
+    app.frames_per_tick = (uint32_t) round(tick_time_ms / frame_time_ms);
+
     switch (app.state) {
         case APP_STATE_LOADING:
         case APP_STATE_WAITING:
@@ -437,18 +454,16 @@ void frame(void) {
             app.state = APP_STATE_RUNNING;
             // fallthough!
         case APP_STATE_RUNNING:
-            // handle delayed mouse-button-up (see SAPP_EVENTTYPE_MOUSE_UP handling)
-            // FIXME: run D_DoomFrame at actual 30 fps, regardless of display refresh rate
-            if (sapp_frame_count() & 1) {
+            if (++app.frame_tick_counter >= app.frames_per_tick) {
+                app.frame_tick_counter = 0;
                 D_DoomFrame();
-                // this prevents that very short mouse button taps on touchpads
-                // are not deteced
-                if (app.delayed_mouse_button_up != 0) {
-                    app.mouse_button_state &= ~app.delayed_mouse_button_up;
-                    app.delayed_mouse_button_up = 0;
+                // this prevents that very short mouse button taps on touchpads are not deteced
+                if (app.inp.delayed_mouse_button_up != 0) {
+                    app.inp.mouse_button_state &= ~app.inp.delayed_mouse_button_up;
+                    app.inp.delayed_mouse_button_up = 0;
                     D_PostEvent(&(event_t){
                         .type = ev_mouse,
-                        .data1 = app.mouse_button_state
+                        .data1 = app.inp.mouse_button_state
                     });
                 }
             }
@@ -468,23 +483,23 @@ void cleanup(void) {
 
 static void push_key(uint8_t key_code, bool pressed) {
     if (key_code != 0) {
-        assert(app.key_write_index < KEY_QUEUE_SIZE);
-        app.key_queue[app.key_write_index] = (key_state_t) {
+        assert(app.inp.key_write_index < KEY_QUEUE_SIZE);
+        app.inp.key_queue[app.inp.key_write_index] = (key_state_t) {
             .key_code = key_code,
             .pressed = pressed
         };
-        app.key_write_index = (app.key_write_index + 1) % KEY_QUEUE_SIZE;
+        app.inp.key_write_index = (app.inp.key_write_index + 1) % KEY_QUEUE_SIZE;
     }
 }
 
 static key_state_t pull_key(void) {
-    if (app.key_read_index == app.key_write_index) {
+    if (app.inp.key_read_index == app.inp.key_write_index) {
         return (key_state_t){0};
     }
     else {
-        assert(app.key_read_index < KEY_QUEUE_SIZE);
-        key_state_t res = app.key_queue[app.key_read_index];
-        app.key_read_index = (app.key_read_index + 1) % KEY_QUEUE_SIZE;
+        assert(app.inp.key_read_index < KEY_QUEUE_SIZE);
+        key_state_t res = app.inp.key_queue[app.inp.key_read_index];
+        app.inp.key_read_index = (app.inp.key_read_index + 1) % KEY_QUEUE_SIZE;
         return res;
     }
 }
@@ -636,21 +651,21 @@ void input(const sapp_event* ev) {
             }
         }
         else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
-            app.mouse_button_state |= (1<<ev->mouse_button);
+            app.inp.mouse_button_state |= (1<<ev->mouse_button);
             D_PostEvent(&(event_t){
                 .type = ev_mouse,
-                .data1 = app.mouse_button_state,
+                .data1 = app.inp.mouse_button_state,
             });
         }
         else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
             // delay mouse up to the next frame so that short
             // taps on touch pads are registered
-            app.delayed_mouse_button_up |= (1<<ev->mouse_button);
+            app.inp.delayed_mouse_button_up |= (1<<ev->mouse_button);
         }
         else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
             D_PostEvent(&(event_t){
                 .type = ev_mouse,
-                .data1 = app.mouse_button_state,
+                .data1 = app.inp.mouse_button_state,
                 .data2 = AccelerateMouse(ev->mouse_dx),
             });
         }
