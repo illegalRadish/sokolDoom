@@ -90,8 +90,8 @@ static struct {
         bool use_sfx_prefix;
         uint16_t cur_sfx_handle;
         snd_channel_t channels[NUM_CHANNELS];
-        uint32_t resample_period;
-        uint32_t resample_interval;
+        uint32_t resample_outhz;
+        uint32_t resample_inhz;
         uint32_t resample_accum;
         float cur_left_sample;
         float cur_right_sample;
@@ -870,10 +870,10 @@ static void snd_mix(int num_frames) {
     int frame_index = 0;
     while (frame_index < num_frames) {
         // compute new left/right sample?
-        if (app.sound.resample_accum >= app.sound.resample_period) {
-            app.sound.resample_accum -= app.sound.resample_period;
-            int dl = 0.0f;
-            int dr = 0.0f;
+        if (app.sound.resample_accum >= app.sound.resample_outhz) {
+            app.sound.resample_accum -= app.sound.resample_outhz;
+            int dl = 0;
+            int dr = 0;
             for (int slot = 0; slot < NUM_CHANNELS; slot++) {
                 snd_channel_t* chn = &app.sound.channels[slot];
                 if (chn->cur_ptr) {
@@ -889,7 +889,7 @@ static void snd_mix(int num_frames) {
             app.sound.cur_left_sample = snd_clampf(((float)dl) / 16383.0f, 1.0f, -1.0f);
             app.sound.cur_right_sample = snd_clampf(((float)dr) / 16383.0f, 1.0f, -1.0f);
         }
-        app.sound.resample_accum += app.sound.resample_interval;
+        app.sound.resample_accum += app.sound.resample_inhz;
 
         // write left and right sample values to mix buffer
         app.sound.mixbuffer[frame_index*2]     = app.sound.cur_left_sample;
@@ -902,8 +902,8 @@ static boolean snd_Init(boolean use_sfx_prefix) {
     assert(use_sfx_prefix);
     app.sound.use_sfx_prefix = use_sfx_prefix;
     assert(app.sound.use_sfx_prefix);
-    app.sound.resample_period = app.sound.resample_accum = saudio_sample_rate();
-    app.sound.resample_interval = 11025;    // sound effect are in 11025Hz
+    app.sound.resample_outhz = app.sound.resample_accum = saudio_sample_rate();
+    app.sound.resample_inhz = 11025;    // sound effect are in 11025Hz
     return true;
 }
 
