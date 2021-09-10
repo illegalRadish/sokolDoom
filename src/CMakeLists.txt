@@ -132,3 +132,12 @@ if (FIPS_GCC)
         -Wno-type-limits
     )
 endif()
+if (FIPS_MSVC)
+    target_compile_options(doom PRIVATE
+        /wd4244 /wd4267     # conversion from 'xxx' to 'yyy' possible loss of data
+        /wd4146             # unary minus perator applied to unsigned type, result still unsigned
+        /wd4018             # signed/unsigned mismatch
+        /wd4996             # ...deprecated...
+        /wd4311             # pointer trunction from 'xxx' to 'yyy'
+    )
+endif()
