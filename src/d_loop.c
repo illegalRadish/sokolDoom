@@ -715,12 +715,15 @@ void TryRunTics (void)
 {
     int	i;
     int	lowtic;
+    /*
     int	entertic;
     static int oldentertics;
     int realtics;
     int	availabletics;
+    */
     int	counts;
 
+    /* SOKOL CHANGE
     // get real tics
     entertic = I_GetTime() / ticdup;
     realtics = entertic - oldentertics;
@@ -729,15 +732,18 @@ void TryRunTics (void)
     // in singletics mode, run a single tic every time this function
     // is called.
 
-// SOKOL CHANGE
-//    if (singletics)
-//    {
+    if (singletics)
+    {
+    */
+
         BuildNewTic();
-//    }
-//    else
-//    {
-//        NetUpdate ();
-//    }
+
+    /* SOKOL CHANGE
+    }
+    else
+    {
+        NetUpdate ();
+    }
 
     lowtic = GetLowTic();
 
@@ -762,12 +768,10 @@ void TryRunTics (void)
         if (counts < 1)
             counts = 1;
 
-        /* SOKOL CHANGE
         if (net_client_connected)
         {
             OldNetSync();
         }
-        */
     }
 
     if (counts < 1)
@@ -794,6 +798,11 @@ void TryRunTics (void)
 
         I_Sleep(1);
     }
+    */
+
+    // SOKOL CHANGE
+    counts = 1;
+    lowtic = GetLowTic();
 
     // run the count * ticdup dics
     while (counts--)

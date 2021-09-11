@@ -740,8 +740,10 @@ void DG_SleepMs(uint32_t ms) {
     assert(false && "DG_SleepMS called!\n");
 }
 
-// NO IDEA why tf this works, but it's a non-intrusive way to fix the timing
-// (I guess Doom advances at least one game tick per frame)
+// NOTE: game loop timing is done entirely through the frame callback,
+// the DG_GetTicksMs() function is now only called from the
+// menu input handling code for mouse and joystick, where timing
+// doesn't matter.
 uint32_t DG_GetTicksMs(void) {
     return 0;
 }
