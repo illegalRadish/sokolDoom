@@ -50,7 +50,7 @@ adds callback functions for easier porting of the rendering-, input- and timing-
 to new platforms. This was very useful to get started but in the end didn't help
 much because Doom (and Doomgeneric) depend on an "own the game loop" application model,
 while sokol_app.h is built around a frame callback model which required some changes
-in the "outer" Doom code itself. Eventually nearly all Doomgeneric callbacks ended
+in the Doom gameloop code itself. Eventually nearly all Doomgeneric callbacks ended
 up as empty stubs, and it probably would have made more sense to start with
 fbDoom, or even the original Doom source code.
 
@@ -101,6 +101,43 @@ Doom code:
   ```INIT``` state. This is where the actual [Doom initialization code](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L455-L460) runs, the application state switches to ```RUNNING```, and [this is finally](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L461-L477) where the actual game code runs frame after frame.
 
 ## Frame Slicing
+
+The original Doom [main() function](https://github.com/id-Software/DOOM/blob/77735c3ff0772609e9c8d29e3ce2ab42ff54d20b/linuxdoom-1.10/i_main.c#L34-L45) calls the [D_DoomMain()](https://github.com/id-Software/DOOM/blob/77735c3ff0772609e9c8d29e3ce2ab42ff54d20b/linuxdoom-1.10/d_main.c#L793-L1171) which doesn't return until the game quits. [D_DoomMain()](https://github.com/id-Software/DOOM/blob/77735c3ff0772609e9c8d29e3ce2ab42ff54d20b/linuxdoom-1.10/d_main.c#L793-L1171) consists of a lot of initialization
+code and finally calls the [D_DoomLoop()](https://github.com/id-Software/DOOM/blob/77735c3ff0772609e9c8d29e3ce2ab42ff54d20b/linuxdoom-1.10/d_main.c#L354-L407) function, which has a ```while (1) { ... }``` loop.
+
+The doomgeneric [D_DoomLoop()](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_main.c#L408-L457) looks a bit different but also has the infinite while loop at the end.
+
+The actually function within the while loop is [TryRunTics()](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L706-L821) which has a tricky [nested waiting loop](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L767-L785).
+
+And finally there's another ugly doubly-nested loop at the end of the [D_Display() function](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_main.c#L313-L328) which performs the screen transition
+'wipe' effect.
+
+Those nested loops are all bad for a frame callback application model which is throttled by
+the vsync instead of explict busy loops and need to be 'sliced' into per-frame code.
+
+Let's start at the top:
+
+- The top level ```while (1) { ... }``` loop in the ```D_DoomLoop()``` function has been [removed](https://github.com/floooh/doom-sokol/blob/b2d24da87d7fcc2646cf7a8bdcb2371954fb6c36/src/d_main.c#L434-L450) and moved into a new [D_DoomFrame()](https://github.com/floooh/doom-sokol/blob/b2d24da87d7fcc2646cf7a8bdcb2371954fb6c36/src/d_main.c#L453-L467) function.
+
+- The [TryRunTics() function](https://github.com/floooh/doom-sokol/blob/7f7a6777dc15b4553f68423e6eb3bcda1a898167/src/d_loop.c#L714-L842) has been gutted so that it always runs one game tick per invocation and no longer attempts to adjust the number of executed game tics to 
+the wall clock time.
+
+- The [D_Display() function](https://github.com/floooh/doom-sokol/blob/b2d24da87d7fcc2646cf7a8bdcb2371954fb6c36/src/d_main.c#L166-L180) has been turned into a simple state machine which either executes renders
+screen-wipe-frame or one regular frame.
+
+These 3 hacks were enough to make Doom run within the frame callback application model.
+
+Game tick timing now happens at the top in the sokol_app.h frame callback, and
+this is were I accepted a little compromise. The original Doom runs at a fixed
+35Hz game tick rate (probably because 70Hz was a typical VGA display refresh
+rate in the mid-90s). Instead of trying to force the game to a 35Hz tick rate
+and accept slight stuttering because of skipped game tics on displays refresh
+rates that are not a multiple of 35Hz I allow the game to run slightly slow or
+fast, but never skip a display frame to guarantee a smooth frame rate. For
+instance on a 60Hz, 120Hz or 240Hz monitor the game will run slightly slow at a
+30Hz game tick rate, while on an 80Hz monitor it will run slightly fast at 40Hz.
+Only on a 70Hz or 140Hz display it will run exactly right at 35Hz game tick
+rate.
 
 (TODO)
 
