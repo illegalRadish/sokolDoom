@@ -139,15 +139,43 @@ instance on a 60Hz, 120Hz or 240Hz monitor the game will run slightly slow at a
 Only on a 70Hz or 140Hz display it will run exactly right at 35Hz game tick
 rate.
 
-(TODO)
+## File IO and WAD loading
 
-## WAD Loading
+There's a *lot* of not really relevant file IO in the Doom code base for WAD file 
+discovery, configuration files, savegames and some other stuff which I simply 
+commented out or disabled otherwise.
 
-(TODO)
+The only really relevant file IO code is reading data from a single WAD file. This 
+has been abstracted by asynchronously loading a WAD file into memory before the
+game starts, and then replacing the C runtime file IO functions with equivalent
+functions that work on a memory buffer instead of a filesystem file.
+
+Interestingly, the Doom codebase already includes such a ["memory filesystem" here](https://github.com/floooh/doom-sokol/blob/master/src/memio.c), but doesn't appear to use it.
+
+All WAD file accesses are also already wrapped through a jump table interface
+so that it was [quite trivial](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/doomgeneric_sokol.c#L751-L802) to redirect WAD data loading from the C file IO
+functions to the already existing memio functions.
 
 ## Rendering
 
-(TODO)
+Doom renders to a VGA Mode 13h framebuffer: 320x200 pixels with one byte per pixel,
+referencing a 256 entry color palette.
+
+fbDoom [converts the Mode13 framebuffer into an RGBA framebuffer](https://github.com/maximevince/fbDOOM/blob/476a0cef4a3068015f85993bc916fca38bc2d970/fbdoom/i_video_fbdev.c#L134-L159) with 32 bits
+per pixel, and doomgeneric replaces the [Linux framebuffer write](https://github.com/maximevince/fbDOOM/blob/476a0cef4a3068015f85993bc916fca38bc2d970/fbdoom/i_video_fbdev.c#L445-L446) with a [callback function](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/i_video.c#L294).
+
+In the Sokol port I'm skipping all the additional code in fbDoom and doomgeneric, and 
+use sokol_gfx.h for the color palette lookup and rendering the resulting RGBA8
+texture to the display.
+
+Rendering is performed in two sokol_gfx.h render passes:
+
+- first the Doom framebuffer and current color palette are [copied into dynamic
+textures](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/doomgeneric_sokol.c#L377-L389)
+- next an [offscreen render pass](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/doomgeneric_sokol.c#L391-L403) performs the color palette lookup into a 320x200 RGBA8 texture
+using the [following pixel shader code](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/sokol_shaders.glsl#L14-L22)
+- finally the resulting 320x200 RGBA8 texture is [rendered to the display](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/doomgeneric_sokol.c#L405-L421) with the [correct aspect ratio](https://github.com/floooh/doom-sokol/blob/58947ccf19214800b1f65d435afafe842caf30b8/src/doomgeneric_sokol.c#L353-L373), this second render step
+happens with linear texture filtering so that the upscaled image looks a bit smoother
 
 ## Sound
 
