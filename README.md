@@ -68,7 +68,7 @@ After ```sokol_main()``` is called, execution continues at the
 - [sokol_debugtext.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L170-L173) for rendering a intro screen and data load progress  before the actual game starts
 - [sokol_fetch.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L174-L178) for asynchronously loading data files (the Doom shareware WAD file, and a
 soundfont needed for the sound track)
-- [sokol_audio.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L179-L184) for streaming audio samples to WASAPI, ALSA, WebGL or CoreAudio
+- [sokol_audio.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L179-L184) for streaming audio samples to WASAPI, ALSA, WebAudio or CoreAudio
 
 Next, [sokol-gfx resource objects are created](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L186-L267) which are needed for rendering the Doom framebuffer (more on that later).
 
