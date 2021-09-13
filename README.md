@@ -234,4 +234,4 @@ mixed into the previously generated sound effect sample stream.
 The final missing piece of the sound code is the [update_game_audio() function](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L426-L434). This is 
 called once per frame (not per game tick) by the sokol_app.h frame callback, generates the
 required number of stereo samples for sound effects and music, and finally pushes the
-generates stereo sample stream into sokol_audio.h for playback.
+generated stereo sample stream into sokol_audio.h for playback.
