@@ -1,6 +1,6 @@
 # Doom on Sokol
 
-This is port of the Doom shareware version to the cross-platform [Sokol headers](https://github.com/floooh/sokol).
+This is a port of the Doom shareware version to the cross-platform [Sokol headers](https://github.com/floooh/sokol).
 
 Web version: https://floooh.github.io/doom-sokol/
 
@@ -61,7 +61,7 @@ The original main() function is in [i_main.c](https://github.com/ozkl/doomgeneri
 is in [doomgeneric_sokol.c](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L684-L700), along with all other sokol-port-specific code.
 
 After ```sokol_main()``` is called, execution continues at the
-[init() callback](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L159). This first initialized all sokol libraries:
+[init() callback](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L159). This first initializes all sokol libraries:
 
 - [sokol_time.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L161) for measuring frame duration
 - [sokol_gfx.h](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L162-L169) for rendering the Doom framebuffer via OpenGL, WebGL, D3D11 or Metal
@@ -82,7 +82,7 @@ initialization function.
 
 This is a good time to talk about the general application structure:
 
-All sokol-port-specific data lives in a [single nested data structure](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L75-L129) which is only
+All sokol-port-specific state lives in a [single nested data structure](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L75-L129) which is only
 accessible from within the doomgeneric_sokol.c source file.
 
 The application goes through several states before running any actual 
@@ -107,7 +107,7 @@ code and finally calls the [D_DoomLoop()](https://github.com/id-Software/DOOM/bl
 
 The doomgeneric [D_DoomLoop()](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_main.c#L408-L457) looks a bit different but also has the infinite while loop at the end.
 
-The actually function within the while loop is [TryRunTics()](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L706-L821) which has a tricky [nested waiting loop](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L767-L785).
+The actually important function within the while loop is [TryRunTics()](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L706-L821) which has a tricky [nested waiting loop](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_loop.c#L767-L785).
 
 And finally there's another ugly doubly-nested loop at the end of the [D_Display() function](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/d_main.c#L313-L328) which performs the screen transition
 'wipe' effect.
