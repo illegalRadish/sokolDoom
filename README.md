@@ -122,12 +122,12 @@ Let's start at the top:
 - The [TryRunTics() function](https://github.com/floooh/doom-sokol/blob/7f7a6777dc15b4553f68423e6eb3bcda1a898167/src/d_loop.c#L714-L842) has been gutted so that it always runs one game tick per invocation and no longer attempts to adjust the number of executed game tics to 
 the wall clock time.
 
-- The [D_Display() function](https://github.com/floooh/doom-sokol/blob/b2d24da87d7fcc2646cf7a8bdcb2371954fb6c36/src/d_main.c#L166-L180) has been turned into a simple state machine which either executes renders
-screen-wipe-frame or one regular frame.
+- The [D_Display() function](https://github.com/floooh/doom-sokol/blob/b2d24da87d7fcc2646cf7a8bdcb2371954fb6c36/src/d_main.c#L166-L180) has been turned into a simple state machine which either renders
+a screen-wipe-frame or a regular frame.
 
 These 3 hacks were enough to make Doom run within the frame callback application model.
 
-Game tick timing now happens at the top in the sokol_app.h frame callback, and
+Game tick timing now happens [at the top in the sokol_app.h frame callback](https://github.com/floooh/doom-sokol/blob/32cc2ecf1bbabd7462dfbf57c9d978a9ed18b6e4/src/doomgeneric_sokol.c#L439-L447), and
 this is were I accepted a little compromise. The original Doom runs at a fixed
 35Hz game tick rate (probably because 70Hz was a typical VGA display refresh
 rate in the mid-90s). Instead of trying to force the game to a 35Hz tick rate
@@ -141,13 +141,13 @@ rate.
 
 ## File IO and WAD loading
 
-There's a *lot* of not really relevant file IO in the Doom code base for WAD file 
-discovery, configuration files, savegames and some other stuff which I simply 
+There's a *lot* of not really relevant file IO in the original Doom code base for WAD file 
+discovery, configuration files, savegames and some other unimportant things which I simply 
 commented out or disabled otherwise.
 
 The only really relevant file IO code is reading data from a single WAD file. This 
-has been abstracted by asynchronously loading a WAD file into memory before the
-game starts, and then replacing the C runtime file IO functions with equivalent
+has been ported by first loading a WAD file asynchronously into memory before the
+game starts, and then replacing the C-runtime file IO functions with equivalent
 functions that work on a memory buffer instead of a filesystem file.
 
 Interestingly, the Doom codebase already includes such a ["memory filesystem" here](https://github.com/floooh/doom-sokol/blob/master/src/memio.c), but doesn't appear to use it.
