@@ -96,7 +96,7 @@ Doom code:
   with an error message.
 - Once [loading has successfully finished](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L132-L138), the application will switch into the
   ```WAITING``` state. This shows the usual intro screen and the message
-  'Press any key to start game'. When this happens.
+  'Press any key to start game'. 
 - When [a key (or mouse button) is pressed](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L531-L538), the application will switch into the
   ```INIT``` state. This is where the actual [Doom initialization code](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L455-L460) runs, the application state switches to ```RUNNING```, and [this is finally](https://github.com/floooh/doom-sokol/blob/204ee61021e311695c038e4a7529531b98a58ebb/src/doomgeneric_sokol.c#L461-L477) where the actual game code runs frame after frame.
 
