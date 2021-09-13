@@ -179,4 +179,59 @@ happens with linear texture filtering so that the upscaled image looks a bit smo
 
 ## Sound
 
-(TODO)
+Sound support is split into two areas:
+
+- sound effects which are stored as 11025 Hz samples in the WAD file
+- background music which is stored in a custom MIDI-like format called 'MUS' in the
+WAD file which originally required a sound card with sample banks in ROM to play
+
+Doomgeneric simply [ignores sound support](https://github.com/ozkl/doomgeneric/blob/2d9b24f07c78c36becf41d89db30fa99863463e5/doomgeneric/doomfeatures.h#L34-L36), and fbDOOM and the original
+Linux DOOM implement sound effect support [in a separate process](https://github.com/maximevince/fbDOOM/tree/master/sndserv), but I haven't found any signs of background music support there (but I haven't
+looked too hard either).
+
+Mattias Gustavsson's [doom-crt](https://github.com/mattiasgustavsson/doom-crt/) to the rescue!
+
+Doom-crt implements proper background music support through a [MUS parser](https://github.com/mattiasgustavsson/doom-crt/blob/main/libs_win32/mus.h) written by Mattias, and the [TinySoundFont library](https://github.com/schellingb/TinySoundFont) by Bernhard Schelling.
+
+This is how sound support is implemented in Doom-Sokol:
+
+- at the lowest level, [sokol_audio.h](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L179-L184) takes care of forwarding a stream of
+stereo-samples to the platform-specific audio backend (WebAudio, WASAPI, CoreAudio
+or ALSA)
+- sound effects are handled by a [sound module](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L1025-L1037) which is basically
+a collection of callback functions
+- likewise, music is handled by a [music module](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L1233-L1247)
+
+When the Doom code needs to play a sound effect or start a new song, it will call
+one of the callback functions of the sound- or music-module.
+
+The core of the sound effect code are the two functions [snd_addsfx()](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L826-L883) and [snd_mix()](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L897-L926).
+
+The ```snd_addsfx()``` function is called when Doom needs to start a new sound effect.
+This will simply register the sound effect's wave table with a free voice channel.
+Finding a free voice channel (or stealing an occupied channel) already happened
+in Doom's [generic sound effect code](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/s_sound.c#L456-L457).
+
+The function ```snd_mix()``` then simply needs to mix the active sound effects
+of all voice channels [into a stereo sample stream](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L897-L926).
+
+Music support starts with [loading a 'sound font' into memory](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L279-L284) and registering it
+[with the tinysoundfont library](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L708-L711).
+
+Everything else is handled in the music module callback functions.
+
+When Doom wants to start a new music track it first calls the [RegisterSong callback](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L1181-L1185), this simply
+stores a pointer and size to the MUS file data stored in memory.
+
+Next the callback [PlaySong](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L1192-L1203) is called. This registers the song data with the ```mus.h``` library.
+
+Everything else happens in the [mus_mix() function](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L1041-L1154) which plays the same
+role as the ```snd_mix()``` function, but for music. Its task is to generate a stereo
+sample stream by glueing the ```mus.h``` library which parses the MUS file data to the
+TinySoundFont library which 'realizes' MUS events and 'renders' a sample stream which is
+mixed into the previously generated sound effect sample stream.
+
+The final missing piece of the sound code is the [update_game_audio() function](https://github.com/floooh/doom-sokol/blob/914fd54fe6724e822e4404a8f301b30ec419e8bd/src/doomgeneric_sokol.c#L426-L434). This is 
+called once per frame (not per game tick) by the sokol_app.h frame callback, generates the
+required number of stereo samples for sound effects and music, and finally pushes the
+generates stereo sample stream into sokol_audio.h for playback.
