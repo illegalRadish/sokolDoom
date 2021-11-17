@@ -33,6 +33,17 @@ cd doom-sokol
 ./fips run doom
 ```
 
+To open the project in Visual Studio or Xcode, do this instead:
+
+```sh
+mkdir workspace
+cd workspace
+git clone https://github.com/floooh/doom-sokol
+cd doom-sokol
+./fips gen
+./fips open
+```
+
 To build the web version (in the doom-sokol directory):
 
 ```sh
