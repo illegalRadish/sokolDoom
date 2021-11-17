@@ -6,7 +6,7 @@ Web version: https://floooh.github.io/doom-sokol/
 
 Forked from https://github.com/ozkl/doomgeneric
 
-Additional dependencies:
+Also uses:
 
 - TinySoundFont by Bernhard Schelling: https://github.com/schellingb/TinySoundFont
 - MUS support by Mattias Gustavsson: https://github.com/mattiasgustavsson/doom-crt/blob/main/libs_win32/mus.h
