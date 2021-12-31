@@ -6,7 +6,6 @@
 //------------------------------------------------------------------------------
 #include "sokol_app.h"
 #include "sokol_gfx.h"
-#include "sokol_time.h"
 #include "sokol_debugtext.h"
 #include "sokol_fetch.h"
 #include "sokol_audio.h"
@@ -74,7 +73,6 @@ typedef enum {
 
 static struct {
     app_state_t state;
-    uint64_t laptime;
     uint32_t frames_per_tick;   // number of frames per game tick
     uint32_t frame_tick_counter;
     struct {
@@ -158,7 +156,6 @@ void sf_fetch_callback(const sfetch_response_t* response) {
 
 void init(void) {
     // initialize sokol-time, -gfx, -debugtext and -fetch
-    stm_setup();
     sg_setup(&(sg_desc){
         .buffer_pool_size = 8,
         .image_pool_size = 8,
@@ -438,7 +435,7 @@ void frame(void) {
 
     // compute frames-per-tick to get us close to the ideal 35 Hz game tick
     // but without skipping ticks
-    double frame_time_ms = stm_ms(stm_laptime(&app.laptime));
+    double frame_time_ms = sapp_frame_duration() * 1000.0;
     if (frame_time_ms > 40.0) {
         // prevent overly long frames (for instance when in debugger)
         frame_time_ms = 40.0;
