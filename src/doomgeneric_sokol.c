@@ -128,7 +128,7 @@ static struct {
 
 void wad_fetch_callback(const sfetch_response_t* response) {
     if (response->fetched) {
-        app.data.wad.size = response->fetched_size;
+        app.data.wad.size = response->data.size;
         app.data.wad.state = DATA_STATE_VALID;
         if (app.data.sf.state == DATA_STATE_VALID) {
             app.state = APP_STATE_WAITING;
@@ -142,7 +142,7 @@ void wad_fetch_callback(const sfetch_response_t* response) {
 
 void sf_fetch_callback(const sfetch_response_t* response) {
     if (response->fetched) {
-        app.data.sf.size = response->fetched_size;
+        app.data.sf.size = response->data.size;
         app.data.sf.state = DATA_STATE_VALID;
         if (app.data.wad.state == DATA_STATE_VALID) {
             app.state = APP_STATE_WAITING;
@@ -270,14 +270,12 @@ void init(void) {
     sfetch_send(&(sfetch_request_t){
         .path = "doom1.wad.wasm",
         .callback = wad_fetch_callback,
-        .buffer_ptr = app.data.wad.buf,
-        .buffer_size = sizeof(app.data.wad.buf)
+        .buffer = SFETCH_RANGE(app.data.wad.buf),
     });
     sfetch_send(&(sfetch_request_t){
         .path = "aweromgm.sf2.wasm",
         .callback = sf_fetch_callback,
-        .buffer_ptr = app.data.sf.buf,
-        .buffer_size = sizeof(app.data.sf.buf)
+        .buffer = SFETCH_RANGE(app.data.sf.buf),
     });
     app.state = APP_STATE_LOADING;
 }
@@ -401,8 +399,8 @@ static void draw_game_frame(void) {
 
     // render resulting texture to display framebuffer with upscaling
     const sg_pass_action display_pass_action = {
-        .colors[0] = { 
-            .action = SG_ACTION_CLEAR, 
+        .colors[0] = {
+            .action = SG_ACTION_CLEAR,
             .value = { 0.0f, 0.0f, 0.0f, 1.0f }
         }
     };
